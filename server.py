@@ -138,5 +138,5 @@ def register():
     else:
         return "Wrong Headers", 403
 
-if __name__ == "__main__":
-    app.run(use_reloader=True, threaded=True)
+
+app.run(os.environ.get('PORT'))
