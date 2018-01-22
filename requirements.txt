@@ -20,18 +20,13 @@ Jinja2==2.10
 MarkupSafe==1.0
 matplotlib==2.0.0
 networkx==1.11
-numpy==1.12.0+mkl
 olefile==0.44
-opencv-python==3.2.0.6
 paramiko==2.1.2
 pgmagick==0.6.3
-Pillow==4.0.0
 pyasn1==0.2.3
 pycparser==2.17
 pyfcm==1.4.3
 pymongo==3.6.0
-pymssql==2.1.1
-pyodbc==4.0.21
 pyparsing==2.1.10
 Pyrex==0.9.9
 python-dateutil==2.6.0
@@ -40,8 +35,6 @@ pytz==2016.10
 requests==2.18.4
 requests-toolbelt==0.8.0
 scapy==2.3.3
-scikit-image==0.12.3
-scipy==0.19.0rc2
 selectivesearch==0.3
 six==1.10.0
 termcolor==1.1.0
