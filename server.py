@@ -11,8 +11,9 @@ VAPID_PUBLIC_KEY = open(BASE_DIR + "/public_key.txt", "r+").read().strip("\n")
 VAPID_CLAIMS = {
     "sub": "mailto:sdwhat@europe.com"
 }
-
-MONGO_URL = os.environ.get('MONGODB_URI')
+MONGO_URL = "mongodb://davsap:harrY)0731@ds211588.mlab.com:11588/flex-app"
+if os.environ.get('MONGODB_URI'):
+    MONGO_URL =os.environ.get('MONGODB_URI')
 FCM_API_KEY = "AAAATWdiNVI:APA91bGWQD5T9IIJuIB-M7qsflpQjgjM55cZ7vI8lb7CuM-t6Eb-qweCIj92cgPBq0bVyC9KaT4Psuu019L7gQa7TWTd9raCNNjJB6ASAMMoWIvFRGSR59XaB-0cW0TPhPo-0AcbgbMf"
 push_service = FCMNotification(api_key=FCM_API_KEY)
 
@@ -141,4 +142,4 @@ port = 3141
 if os.environ.get('PORT'):
     print (os.environ.get('PORT'))
     port = int(os.environ.get('PORT'))
-app.run(port=port)
+app.run(port=port, host='0.0.0.0')
