@@ -139,4 +139,4 @@ def register():
         return "Wrong Headers", 403
 
 
-app.run(port=os.environ.get('PORT'))
+app.run(port=int(os.environ.get('PORT')))
