@@ -139,4 +139,4 @@ def register():
         return "Wrong Headers", 403
 
 
-app.run(use_reloader=True, port=3142, threaded=True)
+app.run(use_reloader=True, threaded=True)
