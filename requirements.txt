@@ -28,7 +28,6 @@ pyfcm
 pymongo
 pyparsing
 python-dateutil
-PythonMagick
 pytz
 requests
 requests-toolbelt
