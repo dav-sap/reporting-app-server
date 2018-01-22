@@ -22,7 +22,6 @@ matplotlib==2.0.0
 networkx==1.11
 olefile==0.44
 paramiko==2.1.2
-pgmagick==0.6.3
 pyasn1==0.2.3
 pycparser==2.17
 pyfcm==1.4.3
