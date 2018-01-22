@@ -75,7 +75,6 @@ def send_push_msg_to_admins(name, email, loc, subscription_info):
         create_admin(name, email, subscription_info, loc)
 
 
-
 @app.route('/add_user', methods=['POST'])
 def add_user():
     headers = request.headers
@@ -95,6 +94,16 @@ def add_user():
             return "User added"
         else:
             return "No member found in awaiting list", 404
+    else:
+        return "Wrong Headers", 403
+
+
+@app.route('/add_report', methods=['POST'])
+def add_user():
+    headers = request.headers
+    if 'Name' in headers.keys() and 'Email' in headers.keys() and 'Status' in headers.keys() and 'Date' in headers.keys():
+        db.Members.find_one_and_update({'name': headers['name'], 'email': headers['email']}, {'$push': {headers['status']: headers['date']}})
+        return "report added"
     else:
         return "Wrong Headers", 403
 
