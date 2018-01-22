@@ -38,5 +38,4 @@ toolz
 urllib3
 virtualenv
 virtualenvwrapper
-virtualenvwrapper-powershell
 Werkzeug
