@@ -1,2 +1,2 @@
 mongod --port 3142 --dbpath ./db
-web: gunicorn app
+web: python server.py
