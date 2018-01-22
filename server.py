@@ -1,4 +1,4 @@
-import os, sys
+# import os, sys
 from flask import Flask, send_from_directory, request
 from flask_cors import CORS, cross_origin
 import json
@@ -7,8 +7,8 @@ from pywebpush import webpush
 from pyfcm import FCMNotification
 from pymongo import MongoClient
 
-VAPID_PRIVATE_KEY = open(os.path.dirname(sys.argv[0]) + "/private_key.txt", "r+").readline().strip("\n")
-VAPID_PUBLIC_KEY = open(os.path.dirname(sys.argv[0]) + "/public_key.txt", "r+").read().strip("\n")
+VAPID_PRIVATE_KEY = open("/private_key.txt", "r+").readline().strip("\n")
+VAPID_PUBLIC_KEY = open("/public_key.txt", "r+").read().strip("\n")
 VAPID_CLAIMS = {
     "sub": "mailto:sdwhat@europe.com"
 }
