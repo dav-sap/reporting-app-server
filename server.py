@@ -138,5 +138,5 @@ def register():
     else:
         return "Wrong Headers", 403
 
-
-app.run(use_reloader=True, threaded=True)
+if __name__ == "__main__":
+    app.run(use_reloader=True, threaded=True)
