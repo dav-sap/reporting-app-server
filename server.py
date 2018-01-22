@@ -99,7 +99,7 @@ def add_user():
 
 
 @app.route('/add_report', methods=['POST'])
-def add_user():
+def add_report():
     headers = request.headers
     if 'Name' in headers.keys() and 'Email' in headers.keys() and 'Status' in headers.keys() and 'Date' in headers.keys():
         db.Members.find_one_and_update({'name': headers['name'], 'email': headers['email']}, {'$push': {headers['status']: headers['date']}})
