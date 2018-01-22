@@ -12,13 +12,13 @@ VAPID_CLAIMS = {
     "sub": "mailto:sdwhat@europe.com"
 }
 
-
+MONGO_URL = os.environ.get('MONGODB_URI')
 FCM_API_KEY = "AAAATWdiNVI:APA91bGWQD5T9IIJuIB-M7qsflpQjgjM55cZ7vI8lb7CuM-t6Eb-qweCIj92cgPBq0bVyC9KaT4Psuu019L7gQa7TWTd9raCNNjJB6ASAMMoWIvFRGSR59XaB-0cW0TPhPo-0AcbgbMf"
 push_service = FCMNotification(api_key=FCM_API_KEY)
 
 app = Flask(__name__)
 
-mongo_client = MongoClient('localhost:3141')
+mongo_client = MongoClient(MONGO_URL)
 db = mongo_client.MembersData
 CORS(app)
 
