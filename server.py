@@ -16,7 +16,7 @@ VAPID_CLAIMS = {
 FCM_API_KEY = "AAAATWdiNVI:APA91bGWQD5T9IIJuIB-M7qsflpQjgjM55cZ7vI8lb7CuM-t6Eb-qweCIj92cgPBq0bVyC9KaT4Psuu019L7gQa7TWTd9raCNNjJB6ASAMMoWIvFRGSR59XaB-0cW0TPhPo-0AcbgbMf"
 push_service = FCMNotification(api_key=FCM_API_KEY)
 
-app = Flask(__name__, static_folder=APP_BUILD_FOLDER )
+app = Flask(__name__)
 
 mongo_client = MongoClient('localhost:3142')
 db = mongo_client.MembersData
