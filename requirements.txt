@@ -31,7 +31,6 @@ python-dateutil
 pytz
 requests
 requests-toolbelt
-scapy
 selectivesearch
 six
 termcolor
