@@ -10,7 +10,7 @@ from pymongo import MongoClient
 VAPID_PRIVATE_KEY = open(os.path.dirname(sys.argv[0]) + "/private_key.txt", "r+").readline().strip("\n")
 VAPID_PUBLIC_KEY = open(os.path.dirname(sys.argv[0]) + "/public_key.txt", "r+").read().strip("\n")
 VAPID_CLAIMS = {
-    "sub": "mailto:davidsaper2@gmail.com"
+    "sub": "mailto:sdwhat@europe.com"
 }
 
 APP_BUILD_FOLDER = 'pwa-experiment/build'
@@ -25,24 +25,55 @@ db = mongo_client.MembersData
 CORS(app)
 
 
-def send_push_msg_to_admins(name, email, loc, subscription_info):
-    db.awaitingMembers.insert_one({
-            "name": name,
-            "email": email,
-            "subscription": subscription_info,
-            "loc": loc,
-        })
-    for doc in db.Members.find({"admin": True}):
-        print("ADMIN: " + str(doc))
+def create_admin(name, email, subscription_info, loc):
+    data_message = {
+        "title": "You are an Admin",
+        "name": name,
+        "email": email,
+        "approved": True,
+    }
+    webpush(subscription_info, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
+            vapid_claims=VAPID_CLAIMS)
+    print("No Admins. Making " + name + " an Admin!")
+    db.Members.insert_one({
+        "name": name,
+        "email": email,
+        "subscription": subscription_info,
+        "loc": loc,
+        "admin": True
+    })
 
-        data_message = {
-            "title": "User approval",
-            "body": name + " , " + email + ", wants to register",
-            "name": name,
-            "email": email,
-            "admin": True
-        }
-        webpush(doc["subscription"], json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS)
+
+def send_push_msg_to_admins(name, email, loc, subscription_info):
+    admins = db.Members.find({"admin": True})
+    if admins and admins.count() > 0:
+        admin_sent = False
+        for doc in admins:
+            print("ADMIN: " + str(doc))
+            data_message = {
+                "title": "User approval",
+                "body": name + " , " + email + ", wants to register",
+                "name": name,
+                "email": email,
+                "admin": True
+            }
+            try:
+                webpush(doc["subscription"], json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS, timeout=10)
+                admin_sent = True
+            except Exception as e:
+                db.Members.find_one_and_delete(doc)
+        if admin_sent:
+            db.awaitingMembers.insert_one({
+                "name": name,
+                "email": email,
+                "subscription": subscription_info,
+                "loc": loc,
+            })
+        else:
+            create_admin(name, email, subscription_info, loc)
+    else:
+        create_admin(name, email, subscription_info, loc)
+
 
 
 @app.route('/add_user', methods=['POST'])
@@ -74,6 +105,14 @@ def deny_user():
     if 'Name' in headers.keys() and 'Email' in headers.keys():
         member = db.awaitingMembers.find_one_and_delete({'name': headers['name'], 'email': headers['email']})
         if member:
+            data_message = {
+                "title": "Your'e registration has been denied!",
+                "name": member["name"],
+                "email": member["email"],
+                "approved": False,
+            }
+            webpush(member["subscription"], json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
+                    vapid_claims=VAPID_CLAIMS)
             return "user removed from waiting list"
         else:
             return "No member found in awaiting list", 404
@@ -85,7 +124,7 @@ def deny_user():
 def register():
     headers = request.headers
     if 'Name' in headers.keys() and 'Email' in headers.keys() and 'Sub' in headers.keys():
-        if len(db.Members.find({"email": headers['email'], 'name': headers['name']})) > 0:
+        if db.Members.find({"email": headers['email'], 'name': headers['name']}).count() > 0:
             return "User already exists in DB", 403
         send_push_msg_to_admins(headers['name'],  headers['email'], 'JER', json.loads(headers['sub']))
         return "Waiting on Auth", 200
