@@ -1,5 +1,3 @@
-beautifulsoup4
-bs4
 certifi
 cffi
 chardet
@@ -14,14 +12,10 @@ Flask
 Flask-Cors
 idna
 imutils
-ipaddress
 itsdangerous
 Jinja2
 MarkupSafe
-matplotlib
-networkx
 olefile
-paramiko
 pyasn1
 pycparser
 pyfcm
@@ -31,11 +25,7 @@ python-dateutil
 pytz
 requests
 requests-toolbelt
-selectivesearch
 six
-termcolor
-toolz
 urllib3
-virtualenv
-virtualenvwrapper
+pywebpush
 Werkzeug
