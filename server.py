@@ -137,6 +137,8 @@ def register():
         return "Waiting on Auth", 200
     else:
         return "Wrong Headers", 403
-
-
-app.run(port=int(os.environ.get('PORT')))
+port = 3141
+if os.environ.get('PORT'):
+    print (os.environ.get('PORT'))
+    port = int(os.environ.get('PORT'))
+app.run(port=port)
