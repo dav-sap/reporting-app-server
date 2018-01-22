@@ -1,19 +1,17 @@
-# import os, sys
+import os, sys
 from flask import Flask, send_from_directory, request
 from flask_cors import CORS, cross_origin
 import json
 from pywebpush import webpush
-# from flask_pyfcm import FCM
 from pyfcm import FCMNotification
 from pymongo import MongoClient
-
+print (os.path.dirname(sys.argv[0]))
 VAPID_PRIVATE_KEY = open("/private_key.txt", "r+").readline().strip("\n")
 VAPID_PUBLIC_KEY = open("/public_key.txt", "r+").read().strip("\n")
 VAPID_CLAIMS = {
     "sub": "mailto:sdwhat@europe.com"
 }
 
-APP_BUILD_FOLDER = 'pwa-experiment/build'
 
 FCM_API_KEY = "AAAATWdiNVI:APA91bGWQD5T9IIJuIB-M7qsflpQjgjM55cZ7vI8lb7CuM-t6Eb-qweCIj92cgPBq0bVyC9KaT4Psuu019L7gQa7TWTd9raCNNjJB6ASAMMoWIvFRGSR59XaB-0cW0TPhPo-0AcbgbMf"
 push_service = FCMNotification(api_key=FCM_API_KEY)
