@@ -18,7 +18,7 @@ push_service = FCMNotification(api_key=FCM_API_KEY)
 
 app = Flask(__name__)
 
-mongo_client = MongoClient('localhost:3142')
+mongo_client = MongoClient('localhost:3141')
 db = mongo_client.MembersData
 CORS(app)
 
@@ -139,4 +139,4 @@ def register():
         return "Wrong Headers", 403
 
 
-app.run(use_reloader=True, threaded=True)
+app.run(use_reloader=True, port=3142, threaded=True)
