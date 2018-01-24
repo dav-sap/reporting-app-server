@@ -5,6 +5,8 @@ import json
 from pywebpush import webpush
 from pyfcm import FCMNotification
 from pymongo import MongoClient
+from pymongo import ReturnDocument
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 VAPID_PRIVATE_KEY = open(BASE_DIR + "/private_key.txt", "r+").readline().strip("\n")
 VAPID_PUBLIC_KEY = open(BASE_DIR + "/public_key.txt", "r+").read().strip("\n")
@@ -30,6 +32,7 @@ def create_admin(name, email, subscription_info, loc):
         "name": name,
         "email": email,
         "approved": True,
+        "sub": subscription_info,
     }
     webpush(subscription_info, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
             vapid_claims=VAPID_CLAIMS)
@@ -88,11 +91,27 @@ def add_user():
                 "email": member["email"],
                 "admin": False,
                 "approved": True,
+                "sub": member["subscription"],
             }
             webpush(member["subscription"], json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS)
             return "User added"
         else:
             return "No member found in awaiting list", 404
+    else:
+        return "Wrong Headers", 403
+
+
+@app.route('/verify_user', methods=['POST'])
+def verify_user():
+    headers = request.headers
+    if 'Name' in headers.keys() and 'Email' in headers.keys() and 'Sub' in headers.keys():
+        member = db.Members.find_one({"email": headers['email'], 'name': headers['name']})
+        if member:
+            if member['subscription'] == headers['sub']:
+                return {'info': "user verified", member: member}, 200
+            else:
+                member = db.Members.find_one_and_update({'name': headers['name'], "email": headers['email']}, {"subscription": json.loads(headers['sub'])}, return_document=ReturnDocument.AFTER)
+                return {'info': "user subscription updated", member: member}, 200
     else:
         return "Wrong Headers", 403
 
@@ -138,6 +157,23 @@ def register():
         return "Waiting on Auth", 200
     else:
         return "Wrong Headers", 403
+
+
+@app.route('/login', methods=['POST'])
+def login():
+    headers = request.headers
+    if 'Name' in headers.keys() and 'Email' in headers.keys() and 'Sub' in headers.keys():
+        member = db.Members.find_one({"email": headers['email'], 'name': headers['name']})
+        if member:
+            if member['subscription'] == headers['sub']:
+                return "user logged in", 200
+            else:
+                db.Members.find_one_and_update({'name': headers['name'], "email": headers['email']}, {"subscription": json.loads(headers['sub'])})
+                return "user subscription updated", 200
+    else:
+        return "Wrong Headers", 403
+
+
 port = 3141
 if os.environ.get('PORT'):
     print (os.environ.get('PORT'))
