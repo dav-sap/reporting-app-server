@@ -32,11 +32,18 @@ def create_admin(name, email, subscription_info, loc):
         "name": name,
         "email": email,
         "approved": True,
-        "sub": subscription_info,
+        "subscription": subscription_info,
     }
     webpush(subscription_info, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
             vapid_claims=VAPID_CLAIMS)
     print("No Admins. Making " + name + " an Admin!")
+    member = {
+        "name": name,
+        "email": email,
+        "subscription": subscription_info,
+        "loc": loc,
+        "admin": True
+    }
     db.Members.insert_one({
         "name": name,
         "email": email,
@@ -44,6 +51,7 @@ def create_admin(name, email, subscription_info, loc):
         "loc": loc,
         "admin": True
     })
+    return member
 
 
 def send_push_msg_to_admins(name, email, loc, subscription_info):
@@ -59,11 +67,9 @@ def send_push_msg_to_admins(name, email, loc, subscription_info):
                 "email": email,
                 "admin": True
             }
-            try:
+            if doc["subscription"]:
                 webpush(doc["subscription"], json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS, timeout=10)
-                admin_sent = True
-            except Exception as e:
-                db.Members.find_one_and_delete(doc)
+            admin_sent = True
         if admin_sent:
             db.awaitingMembers.insert_one({
                 "name": name,
@@ -71,10 +77,25 @@ def send_push_msg_to_admins(name, email, loc, subscription_info):
                 "subscription": subscription_info,
                 "loc": loc,
             })
+            return False
         else:
-            create_admin(name, email, subscription_info, loc)
+            return create_admin(name, email, subscription_info, loc)
+
     else:
-        create_admin(name, email, subscription_info, loc)
+        return create_admin(name, email, subscription_info, loc)
+
+
+@app.route('/cancel_await_member', methods=['POST'])
+def cancel_await_member():
+    headers = request.headers
+    if 'Name' in headers.keys() and 'Email' in headers.keys():
+        member = db.awaitingMembers.find_one_and_delete({'name': headers['name'], 'email': headers['email']})
+        if member:
+            return "member removed", 200
+        else:
+            return "No member found in awaiting list", 404
+    else:
+        return "Wrong Headers", 403
 
 
 @app.route('/add_user', methods=['POST'])
@@ -101,17 +122,46 @@ def add_user():
         return "Wrong Headers", 403
 
 
+@app.route('/get_user_reports', methods=['GET'])
+def get_user_reports():
+    headers = request.headers
+    if 'Name' in headers.keys() and 'Email' in headers.keys():
+        member = db.Members.find_one({"email": headers['email'], 'name': headers['name']})
+        if member:
+            return json.dumps({'OOO': member['OOO'],'WFH': member['WFH'], 'SICK': member['SICK']}), 200
+        else:
+            return "No such member", 401
+    else:
+        return "Wrong Headers", 403
+
+
+@app.route('/logout', methods=['POST'])
+def logout():
+    headers = request.headers
+    if 'Name' in headers.keys() and 'Email' in headers.keys():
+        member = db.Members.find_one_and_update({"email": headers['email'], 'name': headers['name']}, {"$set": {"subscription": {}}}, return_document=ReturnDocument.AFTER)
+        if member:
+            return "Logout Successful", 200
+        else:
+            return "No such member", 401
+    else:
+        return "Wrong Headers", 403
+
+
 @app.route('/verify_user', methods=['POST'])
 def verify_user():
     headers = request.headers
     if 'Name' in headers.keys() and 'Email' in headers.keys() and 'Sub' in headers.keys():
         member = db.Members.find_one({"email": headers['email'], 'name': headers['name']})
         if member:
-            if member['subscription'] == headers['sub']:
-                return {'info': "user verified", member: member}, 200
+            if member['subscription'] == json.loads(headers['sub']):
+                return json.dumps({'info': "user verified"}), 200
             else:
-                member = db.Members.find_one_and_update({'name': headers['name'], "email": headers['email']}, {"subscription": json.loads(headers['sub'])}, return_document=ReturnDocument.AFTER)
-                return {'info': "user subscription updated", member: member}, 200
+                member = db.Members.find_one_and_update({'name': headers['name'], "email": headers['email']}, {"$set": {"subscription": json.loads(headers['sub'])}} , return_document=ReturnDocument.AFTER)
+                member.pop('_id', None)
+                return json.dumps({'info': "user subscription updated", member: member}), 202
+        else:
+            return "No such member", 401
     else:
         return "Wrong Headers", 403
 
@@ -120,8 +170,11 @@ def verify_user():
 def add_report():
     headers = request.headers
     if 'Name' in headers.keys() and 'Status' in headers.keys() and 'Startdate' in headers.keys() and 'Enddate' in headers.keys():
-        db.Members.find_one_and_update({'name': headers['name']}, {'$push': {headers['status']: {'startDate': headers['startdate'], 'endDate': headers['enddate']}}})
-        return "report added"
+        member = db.Members.find_one_and_update({'name': headers['name']}, {'$push': {headers['status']: {'startDate': headers['startdate'], 'endDate': headers['enddate']}}}, return_document=ReturnDocument.AFTER)
+        if member:
+            return "report added", 200
+        else:
+            return "User not found", 403
     else:
         return "Wrong Headers", 403
 
@@ -150,11 +203,14 @@ def deny_user():
 @app.route('/register', methods=['POST'])
 def register():
     headers = request.headers
-    if 'Name' in headers.keys() and 'Email' in headers.keys() and 'Sub' in headers.keys():
+    if 'Name' in headers.keys() and 'Email' in headers.keys() and 'Sub' in headers.keys() and 'Loc' in headers.keys():
         if db.Members.find({"email": headers['email'], 'name': headers['name']}).count() > 0:
-            return "User already exists in DB", 403
-        send_push_msg_to_admins(headers['name'],  headers['email'], 'JER', json.loads(headers['sub']))
-        return "Waiting on Auth", 200
+            return "User already taken", 403
+        member = send_push_msg_to_admins(headers['name'],  headers['email'], headers['loc'], json.loads(headers['sub']))
+        if not member:
+            return json.dumps({'info': "Waiting for Admin Approval"}), 202
+        else:
+            return json.dumps({'info': "You are an Admin", 'member': member}), 200
     else:
         return "Wrong Headers", 403
 
@@ -166,12 +222,15 @@ def login():
         member = db.Members.find_one({"email": headers['email'], 'name': headers['name']})
         if member:
             if member['subscription'] == headers['sub']:
-                return "user logged in", 200
+                return json.dumps({'info': "user logged in", 'member': member}), 200
             else:
-                db.Members.find_one_and_update({'name': headers['name'], "email": headers['email']}, {"subscription": json.loads(headers['sub'])})
-                return "user subscription updated", 200
+                member = db.Members.find_one_and_update({'name': headers['name'], "email": headers['email']}, {"$set": {"subscription": json.loads(headers['sub'])}} , return_document=ReturnDocument.AFTER)
+                member.pop('_id', None)
+                return json.dumps({'info': "user subscription updated", 'member': member}), 200
+        else:
+            return "Login not successful", 401
     else:
-        return "Wrong Headers", 403
+        return "Wrong Headers", 400
 
 
 port = 3141
