@@ -110,6 +110,7 @@ def add_user():
                 "title": "Your'e Approved!",
                 "name": member["name"],
                 "email": member["email"],
+                "body":  member["name"] + " , " + member["email"] + ", have has approved",
                 "admin": False,
                 "approved": True,
                 "sub": member["subscription"],
@@ -186,7 +187,8 @@ def deny_user():
         member = db.awaitingMembers.find_one_and_delete({'name': headers['name'], 'email': headers['email']})
         if member:
             data_message = {
-                "title": "Your'e registration has been denied!",
+                "title": "Approval denied!",
+                "body": member["name"] + " , " + member["email"] + ", your registration has been denied",
                 "name": member["name"],
                 "email": member["email"],
                 "approved": False,
