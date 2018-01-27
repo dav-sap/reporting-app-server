@@ -129,7 +129,9 @@ def get_user_reports():
     if 'Name' in headers.keys() and 'Email' in headers.keys():
         member = db.Members.find_one({"email": headers['email'], 'name': headers['name']})
         if member:
-            return json.dumps({'OOO': member['OOO'],'WFH': member['WFH'], 'SICK': member['SICK']}), 200
+            return json.dumps({'OOO': member['OOO'] if 'OOO' in member.keys() else [],
+                               'WFH':  member['WFH'] if 'WFH' in member.keys() else [],
+                               'SICK':  member['SICK'] if 'SICK' in member.keys() else []}), 200
         else:
             return "No such member", 401
     else:
