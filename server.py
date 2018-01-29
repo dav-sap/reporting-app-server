@@ -3,7 +3,7 @@ from flask import Flask, send_from_directory, request
 from flask_cors import CORS, cross_origin
 import json
 import uuid
-from pywebpush import webpush
+from pywebpush import webpush, WebPushException
 from pyfcm import FCMNotification
 from pymongo import MongoClient
 from pymongo import ReturnDocument
@@ -38,8 +38,10 @@ def create_admin(name, email, subscription_info, loc):
         "subscription": subscription_info,
     }
     if subscription_info:
-        webpush(subscription_info, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
-                vapid_claims=VAPID_CLAIMS)
+        try:
+            webpush(subscription_info, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,vapid_claims=VAPID_CLAIMS)
+        except WebPushException as ex:
+            print("Admin subscription is offline")
     print("No Admins. Making " + name + " an Admin!")
     member = {
         "name": name,
@@ -64,15 +66,20 @@ def send_push_msg_to_admins(name, email, loc, subscription_info):
         admin_sent = False
         for doc in admins:
             print("ADMIN: " + str(doc))
-            if doc["subscription"]:
-                data_message = {
-                    "title": "User approval",
-                    "body": name + " , " + email + ", wants to register",
-                    "name": name,
-                    "email": email,
-                    "admin": True
-                }
-                webpush(doc["subscription"], json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS, timeout=10)
+            try:
+                if doc["subscription"]:
+                    data_message = {
+                        "title": "User approval",
+                        "body": name + " , " + email + ", wants to register",
+                        "name": name,
+                        "email": email,
+                        "admin": True
+                    }
+                    webpush(doc["subscription"], json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS, timeout=10)
+            except WebPushException as ex:
+                print("Admin subscription is offline")
+                db.Members.find_one_and_update({'name': doc['name'], 'email': doc['email']}, {"$set": {"subscription": {}}})
+
             admin_sent = True
         if admin_sent:
             db.awaitingMembers.insert_one({
@@ -110,17 +117,21 @@ def add_user():
         if member:
             db.awaitingMembers.find_one_and_delete({'name': headers['name'], 'email': headers['email']})
             db.Members.insert_one(member)
-            if member["subscription"]:
-                data_message = {
-                    "title": "Your'e Approved!",
-                    "name": member["name"],
-                    "email": member["email"],
-                    "body":  member["name"] + " , " + member["email"] + ", have has approved",
-                    "admin": False,
-                    "approved": True,
-                    "sub": member["subscription"],
-                }
-                webpush(member["subscription"], json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS)
+            try:
+                if member["subscription"]:
+                    data_message = {
+                        "title": "Your'e Approved!",
+                        "name": member["name"],
+                        "email": member["email"],
+                        "body":  member["name"] + " , " + member["email"] + ", have has approved",
+                        "admin": False,
+                        "approved": True,
+                        "sub": member["subscription"],
+                    }
+                    webpush(member["subscription"], json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS)
+            except WebPushException as ex:
+                print("user subscription is offline")
+                db.Members.find_one_and_update({'name': member['name'], 'email': member['email']},{"$set": {"subscription": {}}})
             return "User added"
         else:
             return "No member found in awaiting list", 404
@@ -207,19 +218,21 @@ def deny_user():
     if 'Name' in headers.keys() and 'Email' in headers.keys():
         member = db.awaitingMembers.find_one_and_delete({'name': headers['name'], 'email': headers['email']})
         if member:
-            if member["subscription"]:
-                data_message = {
-                    "title": "Approval denied!",
-                    "body": member["name"] + " , " + member["email"] + ", your registration has been denied",
-                    "name": member["name"],
-                    "email": member["email"],
-                    "approved": False,
-                }
-                webpush(member["subscription"], json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
-                        vapid_claims=VAPID_CLAIMS)
-                return "user removed from waiting list"
-            else:
-                return "user denied and removed, no subscription to send push", 200
+            try:
+                if member["subscription"]:
+                    data_message = {
+                        "title": "Approval denied!",
+                        "body": member["name"] + " , " + member["email"] + ", your registration has been denied",
+                        "name": member["name"],
+                        "email": member["email"],
+                        "approved": False,
+                    }
+                    webpush(member["subscription"], json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
+                            vapid_claims=VAPID_CLAIMS)
+            except WebPushException as ex:
+                print("user subscription is offline")
+                db.Members.find_one_and_update({'name': member['name'], 'email': member['email']}, {"$set": {"subscription": {}}})
+                return "user removed from waiting list", 200
         else:
             return "No member found in awaiting list", 404
     else:
