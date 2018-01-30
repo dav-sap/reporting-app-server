@@ -9,6 +9,8 @@ from pymongo import MongoClient
 from pymongo import ReturnDocument
 from bson.json_util import loads
 from bson.json_util import dumps
+from dateutil.parser import parse
+import datetime
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 VAPID_PRIVATE_KEY = open(BASE_DIR + "/private_key.txt", "r+").readline().strip("\n")
@@ -109,6 +111,49 @@ def cancel_await_member():
         return "Wrong Headers", 403
 
 
+def removeTZ(date):
+    if date[len(date) - 1] == ")":
+        return date[:date.rfind("(")]
+    else:
+        return date
+
+
+@app.route('/get_members_status_by_date', methods=['GET'])
+def get_members_status_by_date():
+    date = str(request.args.get('date'))
+    if date:
+        given_date = parse(date).strftime('%d/%m/%Y')
+        members = db.Members.find({})
+        ooo = []
+        wfh = []
+        sick = []
+        for member in members:
+            if 'OOO' in member.keys():
+                for item in member['OOO']:
+                    start_dt = parse(removeTZ(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
+                    end_dt = parse(removeTZ(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
+                    if start_dt <= given_date <= end_dt:
+                        item['name'] = member['name']
+                        ooo.append(item)
+            if 'WFH' in member.keys():
+                for item in member['WFH']:
+                    start_dt = parse(removeTZ(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
+                    end_dt = parse(removeTZ(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
+                    if start_dt <= given_date <= end_dt:
+                        item['name'] = member['name']
+                        wfh.append(item)
+            if 'SICK' in member.keys():
+                for item in member['SICK']:
+                    start_dt = parse(removeTZ(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
+                    end_dt = parse(removeTZ(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
+                    if start_dt <= given_date <= end_dt:
+                        item['name'] = member['name']
+                        sick.append(item)
+        return dumps({'OOO': ooo, 'WFH': wfh, 'SICK': sick}), 200
+    else:
+        return "Wrong Headers", 403
+
+
 @app.route('/add_user', methods=['POST'])
 def add_user():
     headers = request.headers
@@ -202,8 +247,8 @@ def verify_user():
 @app.route('/add_report', methods=['POST'])
 def add_report():
     headers = request.headers
-    if 'Name' in headers.keys() and 'Status' in headers.keys() and 'Startdate' in headers.keys() and 'Enddate' in headers.keys():
-        member = db.Members.find_one_and_update({'name': headers['name']}, {'$push': {headers['status']: {'startDate': headers['startdate'], 'endDate': headers['enddate'], '_id': uuid.uuid4()}}}, return_document=ReturnDocument.AFTER)
+    if 'Name' in headers.keys() and 'Status' in headers.keys() and 'Startdate' in headers.keys() and 'Enddate' in headers.keys() and 'Note' in headers.keys():
+        member = db.Members.find_one_and_update({'name': headers['name']}, {'$push': {headers['status']: {'startDate': headers['startdate'], 'endDate': headers['enddate'], 'note': headers['note'],'_id': uuid.uuid4()}}}, return_document=ReturnDocument.AFTER)
         if member:
             return "report added", 200
         else:
