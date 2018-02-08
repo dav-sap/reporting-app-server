@@ -33,13 +33,11 @@ db = connection['flex-app']
 CORS(app)
 
 
-@sched.scheduled_job('cron', day_of_week='sun,mon,tue,wed,thu',hour=9, minute=5, timezone="Israel", second=0)
+@sched.scheduled_job('cron', day_of_week='sun,mon,tue,wed,thu',hour=9, minute=15, timezone="Israel", second=0)
 def daily_update():
-    print ("hello")
-    admins = db.Members.find({"admin": True})
-    if admins and admins.count() > 0:
-        for doc in admins:
-            print("ADMIN: " + str(doc))
+    members = db.Members.find({})
+    if members and members.count() > 0:
+        for doc in members:
             try:
                 if doc["subscription"]:
                     data_message = {
