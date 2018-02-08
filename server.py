@@ -11,6 +11,12 @@ from bson.json_util import loads
 from bson.json_util import dumps
 from dateutil.parser import parse
 import datetime
+import time
+import atexit
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.schedulers.blocking import BlockingScheduler
+sched = BlockingScheduler()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 VAPID_PRIVATE_KEY = open(BASE_DIR + "/private_key.txt", "r+").readline().strip("\n")
@@ -29,6 +35,28 @@ app = Flask(__name__)
 connection = MongoClient(MONGO_URL)
 db = connection['flex-app']
 CORS(app)
+
+
+@sched.scheduled_job('cron', day_of_week='sun,mon,tue,wed,thu',hour=8, minute=50, timezone="Israel", second=0)
+def daily_update():
+    print ("hello")
+    admins = db.Members.find({"admin": True})
+    if admins and admins.count() > 0:
+        for doc in admins:
+            print("ADMIN: " + str(doc))
+            try:
+                if doc["subscription"]:
+                    data_message = {
+                        "title": "Morning Report",
+                        "body": "Morning, What are u up to today?",
+                    }
+                    webpush(doc["subscription"], json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
+                            vapid_claims=VAPID_CLAIMS, timeout=10)
+            except WebPushException as ex:
+                print("subscription is offline")
+                db.Members.find_one_and_update({'name': doc['name'], 'email': doc['email']},
+                                               {"$set": {"subscription": {}}})
+
 
 
 def create_admin(name, email, subscription_info, loc):
@@ -63,6 +91,7 @@ def create_admin(name, email, subscription_info, loc):
 
 
 def send_push_msg_to_admins(name, email, loc, subscription_info):
+
     admins = db.Members.find({"admin": True})
     if admins and admins.count() > 0:
         admin_sent = False
@@ -98,6 +127,8 @@ def send_push_msg_to_admins(name, email, loc, subscription_info):
         return create_admin(name, email, subscription_info, loc)
 
 
+
+
 @app.route('/cancel_await_member', methods=['POST'])
 def cancel_await_member():
     headers = request.headers
@@ -111,7 +142,7 @@ def cancel_await_member():
         return "Wrong Headers", 403
 
 
-def removeTZ(date):
+def remove_time_zone(date):
     if date[len(date) - 1] == ")":
         return date[:date.rfind("(")]
     else:
@@ -125,33 +156,51 @@ def get_members_status_by_date():
         given_date = parse(date).strftime('%d/%m/%Y')
         members = db.Members.find({})
         ooo = []
-        wfh = []
+        wf = []
         sick = []
         for member in members:
             if 'OOO' in member.keys():
                 for item in member['OOO']:
-                    start_dt = parse(removeTZ(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
-                    end_dt = parse(removeTZ(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
+                    start_dt = parse(remove_time_zone(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
+                    end_dt = parse(remove_time_zone(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
                     if start_dt <= given_date <= end_dt:
                         item['name'] = member['name']
                         ooo.append(item)
-            if 'WFH' in member.keys():
-                for item in member['WFH']:
-                    start_dt = parse(removeTZ(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
-                    end_dt = parse(removeTZ(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
+            if 'WF' in member.keys():
+                for item in member['WF']:
+                    start_dt = parse(remove_time_zone(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
+                    end_dt = parse(remove_time_zone(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
                     if start_dt <= given_date <= end_dt:
                         item['name'] = member['name']
-                        wfh.append(item)
+                        wf.append(item)
             if 'SICK' in member.keys():
                 for item in member['SICK']:
-                    start_dt = parse(removeTZ(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
-                    end_dt = parse(removeTZ(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
+                    start_dt = parse(remove_time_zone(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
+                    end_dt = parse(remove_time_zone(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
                     if start_dt <= given_date <= end_dt:
                         item['name'] = member['name']
                         sick.append(item)
-        return dumps({'OOO': ooo, 'WFH': wfh, 'SICK': sick}), 200
+        return dumps({'OOO': ooo, 'WF': wf, 'SICK': sick}), 200
     else:
         return "Wrong Headers", 403
+
+
+@app.route('/get_all_members', methods=['GET'])
+def get_all_members():
+    members = db.Members.find({})
+    members_to_return = []
+    for member in members:
+        members_to_return.append(member)
+    return dumps({'members': members_to_return}), 200
+
+
+@app.route('/get_awaiting_members', methods=['GET'])
+def get_awaiting_members():
+    members = db.awaitingMembers.find({})
+    members_to_return = []
+    for member in members:
+        members_to_return.append(member)
+    return dumps({'members': members_to_return}), 200
 
 
 @app.route('/add_user', methods=['POST'])
@@ -205,7 +254,7 @@ def get_user_reports():
         member = db.Members.find_one({"email": headers['email'], 'name': headers['name']})
         if member:
             return dumps({'OOO': member['OOO'] if 'OOO' in member.keys() else [],
-                               'WFH':  member['WFH'] if 'WFH' in member.keys() else [],
+                               'WF':  member['WF'] if 'WF' in member.keys() else [],
                                'SICK':  member['SICK'] if 'SICK' in member.keys() else []}), 200
         else:
             return "No such member", 401
@@ -321,4 +370,6 @@ def login():
 port = 3141
 if os.environ.get('PORT'):
     port = int(os.environ.get('PORT'))
+sched.start()
 app.run(port=port, host='0.0.0.0')
+
