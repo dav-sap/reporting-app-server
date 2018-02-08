@@ -33,7 +33,7 @@ db = connection['flex-app']
 CORS(app)
 
 
-@sched.scheduled_job('cron', day_of_week='sun,mon,tue,wed,thu',hour=9, minute=15, timezone="Israel", second=0)
+@sched.scheduled_job('cron', day_of_week='sun,mon,tue,wed,thu',hour=9, minute=00, timezone="Israel", second=0)
 def daily_update():
     members = db.Members.find({})
     if members and members.count() > 0:
@@ -50,6 +50,33 @@ def daily_update():
                 print("subscription is offline")
                 db.Members.find_one_and_update({'name': doc['name'], 'email': doc['email']},
                                                {"$set": {"subscription": {}}})
+
+
+@app.route('/push_to_all', methods=['POST'])
+def push_to_all():
+    headers = request.headers
+    if 'Msg-Title' in headers.keys() and 'Msg-Body' in headers.keys():
+        members = db.Members.find({})
+        if members and members.count() > 0:
+            for doc in members:
+                try:
+                    if doc["subscription"]:
+                        data_message = {
+                            "title": headers['Msg-Body'],
+                            "body": headers['Msg-Body'],
+                            "admin_message": True
+                        }
+                        webpush(doc["subscription"], json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
+                                vapid_claims=VAPID_CLAIMS)
+                except WebPushException as ex:
+                    print("subscription is offline")
+                    db.Members.find_one_and_update({'name': doc['name'], 'email': doc['email']},
+                                                   {"$set": {"subscription": {}}})
+            return "sending push", 200
+        else:
+            return "No Members", 400
+    else:
+        return "Wrong Headers", 403
 
 
 def create_admin(name, email, subscription_info, loc):
