@@ -17,7 +17,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.schedulers.blocking import BlockingScheduler
 sched = BlockingScheduler()
-
+sched.start()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 VAPID_PRIVATE_KEY = open(BASE_DIR + "/private_key.txt", "r+").readline().strip("\n")
 VAPID_PUBLIC_KEY = open(BASE_DIR + "/public_key.txt", "r+").read().strip("\n")
@@ -37,7 +37,7 @@ db = connection['flex-app']
 CORS(app)
 
 
-@sched.scheduled_job('cron', day_of_week='sun,mon,tue,wed,thu',hour=8, minute=50, timezone="Israel", second=0)
+@sched.scheduled_job('cron', day_of_week='sun,mon,tue,wed,thu',hour=8, minute=55, timezone="Israel", second=0)
 def daily_update():
     print ("hello")
     admins = db.Members.find({"admin": True})
@@ -56,7 +56,6 @@ def daily_update():
                 print("subscription is offline")
                 db.Members.find_one_and_update({'name': doc['name'], 'email': doc['email']},
                                                {"$set": {"subscription": {}}})
-
 
 
 def create_admin(name, email, subscription_info, loc):
@@ -125,8 +124,6 @@ def send_push_msg_to_admins(name, email, loc, subscription_info):
 
     else:
         return create_admin(name, email, subscription_info, loc)
-
-
 
 
 @app.route('/cancel_await_member', methods=['POST'])
@@ -370,6 +367,5 @@ def login():
 port = 3141
 if os.environ.get('PORT'):
     port = int(os.environ.get('PORT'))
-sched.start()
 app.run(port=port, host='0.0.0.0')
 
