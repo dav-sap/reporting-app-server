@@ -11,12 +11,8 @@ from bson.json_util import loads
 from bson.json_util import dumps
 from dateutil.parser import parse
 import datetime
-import time
-import atexit
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.interval import IntervalTrigger
-from apscheduler.schedulers.blocking import BlockingScheduler
-sched = BlockingScheduler()
+sched = BackgroundScheduler()
 sched.start()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 VAPID_PRIVATE_KEY = open(BASE_DIR + "/private_key.txt", "r+").readline().strip("\n")
@@ -37,7 +33,7 @@ db = connection['flex-app']
 CORS(app)
 
 
-@sched.scheduled_job('cron', day_of_week='sun,mon,tue,wed,thu',hour=8, minute=55, timezone="Israel", second=0)
+@sched.scheduled_job('cron', day_of_week='sun,mon,tue,wed,thu',hour=9, minute=5, timezone="Israel", second=0)
 def daily_update():
     print ("hello")
     admins = db.Members.find({"admin": True})
