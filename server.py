@@ -345,6 +345,7 @@ def deny_user():
                 print("user subscription is offline")
                 db.Members.find_one_and_update({'name': member['name'], 'email': member['email']}, {"$set": {"subscription": {}}})
                 return "user removed from waiting list", 200
+            return "user removed from waiting list", 200
         else:
             return "No member found in awaiting list", 404
     else:
