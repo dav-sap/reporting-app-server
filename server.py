@@ -135,7 +135,7 @@ def send_push_msg_to_admins(name, email, loc, subscription_info):
             "subscription": subscription_info,
             "loc": loc,
         })
-        return True
+        return False
     else:
         return create_admin(name, email, subscription_info, loc)
 
