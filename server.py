@@ -264,7 +264,7 @@ def check_subscription():
 def add_subscription():
     headers = request.headers
     if 'Name' in headers.keys() and 'Email' in headers.keys() and 'Sub' in headers.keys():
-        member = db.Members.find_one_and_update({'name': headers['name'], 'email': headers['email']},{"$set": {"subscription": headers['sub']}})
+        member = db.Members.find_one_and_update({'name': headers['name'], 'email': headers['email']},{"$set": {"subscription": loads(headers['sub'] if headers['sub'] else {})}})
         if member:
             return "Removed subscription", 200
         else:
@@ -330,16 +330,15 @@ def logout():
 
 @app.route('/verify_user', methods=['POST'])
 def verify_user():
-    headers = request.headers
-    if 'Name' in headers.keys() and 'Email' in headers.keys() and 'Sub' in headers.keys():
-        member = db.Members.find_one({"email": headers['email'], 'name': headers['name']})
+    body_json = request.get_json()
+    if 'name' in body_json.keys() and 'email' in body_json.keys() and 'sub' in body_json.keys():
+        member = db.Members.find_one({"email": body_json['email'], 'name': body_json['name']})
         if member:
-            if not member['subscription'] or member['subscription'] == json.loads(headers['sub']):
+            if not member['subscription'] or member['subscription'] == json.loads(body_json['sub']):
                 return dumps({'info': "user verified"}), 200
             else:
-                member = db.Members.find_one_and_update({'name': headers['name'], "email": headers['email']}, {"$set": {"subscription": loads(headers['sub'])}} , return_document=ReturnDocument.AFTER)
-                # member.pop('_id', None)
-                return dumps({'info': "user subscription updated", member: member}), 202
+                member = db.Members.find_one_and_update({'name': body_json['name'], "email": body_json['email']}, {"$set": {"subscription": loads(body_json['sub'])}} , return_document=ReturnDocument.AFTER)
+                return json.dumps({'info': "user subscription updated", member: dumps(member)}), 202
         else:
             return "No such member", 401
     else:
@@ -348,9 +347,9 @@ def verify_user():
 
 @app.route('/add_report', methods=['POST'])
 def add_report():
-    headers = request.headers
-    if 'Name' in headers.keys() and 'Status' in headers.keys() and 'Startdate' in headers.keys() and 'Enddate' in headers.keys() and 'Note' in headers.keys():
-        member = db.Members.find_one_and_update({'name': headers['name']}, {'$push': {headers['status']: {'startDate': headers['startdate'], 'endDate': headers['enddate'], 'note': headers['note'],'_id': uuid.uuid4()}}}, return_document=ReturnDocument.AFTER)
+    body_json = request.get_json()
+    if 'name' in body_json.keys() and 'status' in body_json.keys() and 'startDate' in body_json.keys() and 'endDate' in body_json.keys() and 'note' in body_json.keys():
+        member = db.Members.find_one_and_update({'name': body_json['name']}, {'$push': {body_json['status']: {'startDate': body_json['startDate'], 'endDate': body_json['endDate'], 'note': body_json['note'],'_id': uuid.uuid4()}}}, return_document=ReturnDocument.AFTER)
         if member:
             return "report added", 200
         else:
