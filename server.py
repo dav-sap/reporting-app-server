@@ -114,7 +114,6 @@ def send_push_msg_to_admins(name, email, loc, subscription_info):
 
     admins = db.Members.find({"admin": True})
     if admins and admins.count() > 0:
-        admin_sent = False
         for doc in admins:
             print("ADMIN: " + str(doc))
             try:
@@ -129,20 +128,14 @@ def send_push_msg_to_admins(name, email, loc, subscription_info):
                     webpush(doc["subscription"], json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS, timeout=10)
             except WebPushException as ex:
                 print("Admin subscription is offline")
-                db.Members.find_one_and_update({'name': doc['name'], 'email': doc['email']}, {"$set": {"subscription": {}}})
 
-            admin_sent = True
-        if admin_sent:
-            db.awaitingMembers.insert_one({
-                "name": name,
-                "email": email,
-                "subscription": subscription_info,
-                "loc": loc,
-            })
-            return False
-        else:
-            return create_admin(name, email, subscription_info, loc)
-
+        db.awaitingMembers.insert_one({
+            "name": name,
+            "email": email,
+            "subscription": subscription_info,
+            "loc": loc,
+        })
+        return True
     else:
         return create_admin(name, email, subscription_info, loc)
 
@@ -251,6 +244,48 @@ def add_user():
         return "Wrong Headers", 403
 
 
+@app.route('/check_subscription', methods=['POST'])
+def check_subscription():
+    headers = request.headers
+    if 'Name' in headers.keys() and 'Email' in headers.keys():
+        member = db.Members.find_one({'name': headers['name'], 'email': headers['email']})
+        if member:
+            if member["subscription"]:
+                return "subscription exists", 200
+            else:
+                return "No subscription", 401
+        else:
+            return "No member", 401
+    else:
+        return "Wrong Headers", 403
+
+
+@app.route('/add_subscription', methods=['POST'])
+def add_subscription():
+    headers = request.headers
+    if 'Name' in headers.keys() and 'Email' in headers.keys() and 'Sub' in headers.keys():
+        member = db.Members.find_one_and_update({'name': headers['name'], 'email': headers['email']},{"$set": {"subscription": headers['sub']}})
+        if member:
+            return "Removed subscription", 200
+        else:
+            return "No such member", 401
+    else:
+        return "Wrong Headers", 403
+
+
+@app.route('/remove_subscription', methods=['POST'])
+def remove_subscription():
+    headers = request.headers
+    if 'Name' in headers.keys() and 'Email' in headers.keys():
+        member = db.Members.find_one_and_update({'name': headers['name'], 'email': headers['email']},{"$set": {"subscription": {}}})
+        if member:
+            return "Removed subscription", 200
+        else:
+            return "No such member", 401
+    else:
+        return "Wrong Headers", 403
+
+
 @app.route('/remove_report', methods=['POST'])
 def remove_report():
     headers = request.headers
@@ -348,6 +383,33 @@ def deny_user():
             return "user removed from waiting list", 200
         else:
             return "No member found in awaiting list", 404
+    else:
+        return "Wrong Headers", 403
+
+
+@app.route('/remove_member', methods=['POST'])
+def remove_member():
+    headers = request.headers
+    if 'Name' in headers.keys() and 'Email' in headers.keys():
+        member = db.Members.find_one_and_delete({'name': headers['name'], 'email': headers['email']})
+        if member:
+            try:
+                if member["subscription"]:
+                    data_message = {
+                        "title": "Remove Member",
+                        "body": member["name"] + " , " + member["email"] + ", your have been removed, please sign up",
+                        "name": member["name"],
+                        "email": member["email"],
+                        "approved": False,
+                    }
+                    webpush(member["subscription"], json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
+                            vapid_claims=VAPID_CLAIMS)
+            except WebPushException as ex:
+                print("user subscription is offline")
+                return "member removed", 200
+            return "member removed", 200
+        else:
+            return "No member found in member list", 404
     else:
         return "Wrong Headers", 403
 
