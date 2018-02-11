@@ -426,7 +426,7 @@ def register():
         else:
             return dumps({'info': "You are an Admin", 'member': member}), 200
     else:
-        return "Wrong Headers", 403
+        return "Wrong Info", 403
 
 
 @app.route('/login', methods=['POST'])
