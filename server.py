@@ -10,10 +10,10 @@ from pymongo import ReturnDocument
 from bson.json_util import loads
 from bson.json_util import dumps
 from dateutil.parser import parse
-import datetime
-from apscheduler.schedulers.background import BackgroundScheduler
-sched = BackgroundScheduler()
-sched.start()
+# import datetime
+# from apscheduler.schedulers.background import BackgroundScheduler
+# sched = BackgroundScheduler()
+# sched.start()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 VAPID_PRIVATE_KEY = open(BASE_DIR + "/private_key.txt", "r+").readline().strip("\n")
 VAPID_PUBLIC_KEY = open(BASE_DIR + "/public_key.txt", "r+").read().strip("\n")
@@ -33,23 +33,23 @@ db = connection['flex-app']
 CORS(app)
 
 
-@sched.scheduled_job('cron', day_of_week='sun,mon,tue,wed,thu',hour=9, minute=0, timezone="Israel", second=10)
-def daily_update():
-    members = db.Members.find({})
-    if members and members.count() > 0:
-        for doc in members:
-            try:
-                if doc["subscription"]:
-                    data_message = {
-                        "title": "Morning Report",
-                        "body": "Morning, What are u up to today?",
-                    }
-                    webpush(doc["subscription"], json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
-                            vapid_claims=VAPID_CLAIMS, timeout=10)
-            except WebPushException as ex:
-                print("subscription is offline")
-                db.Members.find_one_and_update({'name': doc['name'], 'email': doc['email']},
-                                               {"$set": {"subscription": {}}})
+# @sched.scheduled_job('cron', day_of_week='sun,mon,tue,wed,thu',hour=9, minute=0, timezone="Israel", second=10)
+# def daily_update():
+#     members = db.Members.find({})
+#     if members and members.count() > 0:
+#         for doc in members:
+#             try:
+#                 if doc["subscription"]:
+#                     data_message = {
+#                         "title": "Morning Report",
+#                         "body": "Morning, What are u up to today?",
+#                     }
+#                     webpush(doc["subscription"], json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
+#                             vapid_claims=VAPID_CLAIMS, timeout=10)
+#             except WebPushException as ex:
+#                 print("subscription is offline")
+#                 db.Members.find_one_and_update({'name': doc['name'], 'email': doc['email']},
+#                                                {"$set": {"subscription": {}}})
 
 
 @app.route('/push_to_all', methods=['POST'])
