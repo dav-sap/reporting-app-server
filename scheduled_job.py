@@ -5,7 +5,7 @@ from pyfcm import FCMNotification
 import json
 import datetime
 
-if datetime.datetime.today().weekday() == 1 or datetime.datetime.today().weekday() == 4:
+if datetime.datetime.today().weekday() == 5 or datetime.datetime.today().weekday() == 4:
     print("Wrong weekday: " + str(datetime.datetime.today().weekday()))
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
