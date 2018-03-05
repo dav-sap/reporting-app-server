@@ -10,7 +10,7 @@ from pymongo import ReturnDocument
 from bson.json_util import loads
 from bson.json_util import dumps
 from dateutil.parser import parse
-# import datetime
+from datetime import datetime
 # from apscheduler.schedulers.background import BackgroundScheduler
 # sched = BackgroundScheduler()
 # sched.start()
@@ -174,21 +174,21 @@ def get_members_status_by_date():
                 for item in member['OOO']:
                     start_dt = parse(remove_time_zone(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
                     end_dt = parse(remove_time_zone(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
-                    if start_dt <= given_date <= end_dt:
+                    if datetime.strptime(start_dt, '%d/%m/%Y') <= datetime.strptime(given_date, '%d/%m/%Y')  <= datetime.strptime(end_dt, '%d/%m/%Y'):
                         item['name'] = member['name']
                         ooo.append(item)
             if 'WF' in member.keys():
                 for item in member['WF']:
                     start_dt = parse(remove_time_zone(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
                     end_dt = parse(remove_time_zone(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
-                    if start_dt <= given_date <= end_dt:
+                    if datetime.strptime(start_dt, '%d/%m/%Y') <= datetime.strptime(given_date, '%d/%m/%Y') <= datetime.strptime(end_dt, '%d/%m/%Y'):
                         item['name'] = member['name']
                         wf.append(item)
             if 'SICK' in member.keys():
                 for item in member['SICK']:
                     start_dt = parse(remove_time_zone(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
                     end_dt = parse(remove_time_zone(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
-                    if start_dt <= given_date <= end_dt:
+                    if datetime.strptime(start_dt, '%d/%m/%Y') <= datetime.strptime(given_date, '%d/%m/%Y') <= datetime.strptime(end_dt, '%d/%m/%Y'):
                         item['name'] = member['name']
                         sick.append(item)
         return dumps({'OOO': ooo, 'WF': wf, 'SICK': sick}), 200
