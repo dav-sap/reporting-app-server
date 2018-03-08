@@ -335,7 +335,7 @@ def verify_user():
         member = db.Members.find_one({"email": body_json['email'], 'name': body_json['name']})
         if member:
             if not member['subscription'] or member['subscription'] == json.loads(body_json['sub']):
-                return dumps({'info': "user verified"}), 200
+                return json.dumps({'info': "user verified", 'member': dumps(member)}), 200
             else:
                 member = db.Members.find_one_and_update({'name': body_json['name'], "email": body_json['email']}, {"$set": {"subscription": loads(body_json['sub'])}} , return_document=ReturnDocument.AFTER)
                 return json.dumps({'info': "user subscription updated", member: dumps(member)}), 202
