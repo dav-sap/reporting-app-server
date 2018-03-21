@@ -213,22 +213,19 @@ def get_members_status_between_dates():
             if 'OOO' in member.keys():
                 for item in member['OOO']:
                     start_dt = parse(remove_time_zone(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
-                    end_dt = parse(remove_time_zone(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
-                    if datetime.strptime(start_dt, '%d/%m/%Y') <= datetime.strptime(given_start_date, '%d/%m/%Y') and datetime.strptime(end_dt, '%d/%m/%Y') >= datetime.strptime(given_end_date, '%d/%m/%Y'):
+                    if  datetime.strptime(given_start_date, '%d/%m/%Y') <= datetime.strptime(start_dt, '%d/%m/%Y') <= datetime.strptime(given_end_date, '%d/%m/%Y'):
                         item['name'] = member['name']
                         ooo.append(item)
             if 'WF' in member.keys():
                 for item in member['WF']:
                     start_dt = parse(remove_time_zone(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
-                    end_dt = parse(remove_time_zone(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
-                    if datetime.strptime(start_dt, '%d/%m/%Y') <= datetime.strptime(given_start_date,'%d/%m/%Y') and datetime.strptime(end_dt, '%d/%m/%Y') >= datetime.strptime(given_end_date, '%d/%m/%Y'):
+                    if datetime.strptime(given_start_date, '%d/%m/%Y') <= datetime.strptime(start_dt,'%d/%m/%Y') <= datetime.strptime(given_end_date, '%d/%m/%Y'):
                         item['name'] = member['name']
                         wf.append(item)
             if 'SICK' in member.keys():
                 for item in member['SICK']:
                     start_dt = parse(remove_time_zone(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
-                    end_dt = parse(remove_time_zone(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
-                    if datetime.strptime(start_dt, '%d/%m/%Y') <= datetime.strptime(given_start_date,'%d/%m/%Y') and datetime.strptime(end_dt, '%d/%m/%Y') >= datetime.strptime(given_end_date, '%d/%m/%Y'):
+                    if datetime.strptime(given_start_date, '%d/%m/%Y') <= datetime.strptime(start_dt,'%d/%m/%Y') <= datetime.strptime(given_end_date, '%d/%m/%Y'):
                         item['name'] = member['name']
                         sick.append(item)
         return dumps({'OOO': ooo, 'WF': wf, 'SICK': sick}), 200
