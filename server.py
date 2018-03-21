@@ -196,6 +196,46 @@ def get_members_status_by_date():
         return "Wrong Headers", 403
 
 
+@app.route('/get_members_status_between_dates', methods=['GET'])
+def get_members_status_between_dates():
+    start_date_str = str(request.args.get('startdate'))
+    end_date_str = str(request.args.get('enddate'))
+    if start_date_str and end_date_str:
+        given_start_date = parse(start_date_str).strftime('%d/%m/%Y')
+        given_end_date = parse(end_date_str).strftime('%d/%m/%Y')
+        if not datetime.strptime(given_start_date, '%d/%m/%Y') <= datetime.strptime(given_end_date, '%d/%m/%Y'):
+            return "Wrong Headers", 403
+        members = db.Members.find({})
+        ooo = []
+        wf = []
+        sick = []
+        for member in members:
+            if 'OOO' in member.keys():
+                for item in member['OOO']:
+                    start_dt = parse(remove_time_zone(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
+                    end_dt = parse(remove_time_zone(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
+                    if datetime.strptime(start_dt, '%d/%m/%Y') <= datetime.strptime(given_start_date, '%d/%m/%Y') and datetime.strptime(end_dt, '%d/%m/%Y') >= datetime.strptime(given_end_date, '%d/%m/%Y'):
+                        item['name'] = member['name']
+                        ooo.append(item)
+            if 'WF' in member.keys():
+                for item in member['WF']:
+                    start_dt = parse(remove_time_zone(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
+                    end_dt = parse(remove_time_zone(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
+                    if datetime.strptime(start_dt, '%d/%m/%Y') <= datetime.strptime(given_start_date,'%d/%m/%Y') and datetime.strptime(end_dt, '%d/%m/%Y') >= datetime.strptime(given_end_date, '%d/%m/%Y'):
+                        item['name'] = member['name']
+                        wf.append(item)
+            if 'SICK' in member.keys():
+                for item in member['SICK']:
+                    start_dt = parse(remove_time_zone(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
+                    end_dt = parse(remove_time_zone(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
+                    if datetime.strptime(start_dt, '%d/%m/%Y') <= datetime.strptime(given_start_date,'%d/%m/%Y') and datetime.strptime(end_dt, '%d/%m/%Y') >= datetime.strptime(given_end_date, '%d/%m/%Y'):
+                        item['name'] = member['name']
+                        sick.append(item)
+        return dumps({'OOO': ooo, 'WF': wf, 'SICK': sick}), 200
+    else:
+        return "Wrong Headers", 403
+
+
 @app.route('/get_all_members', methods=['GET'])
 def get_all_members():
     members = db.Members.find({})
