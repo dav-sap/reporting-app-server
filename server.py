@@ -372,7 +372,7 @@ def verify_user():
             if not member['subscription'] or member['subscription'] == json.loads(body_json['sub']):
                 return json.dumps({'info': "user verified", 'member': dumps(member)}), 200
             else:
-                member = db.Members.find_one_and_update({'name': body_json['name'], "email": body_json['email']}, {"$set": {"subscription": loads(body_json['sub'])}} , return_document=ReturnDocument.AFTER)
+                member = db.Members.find_one_and_update({'name': body_json['name'], "email": body_json['email']}, {"$push": {"subscription": loads(body_json['sub'])}} , return_document=ReturnDocument.AFTER)
                 return json.dumps({'info': "user subscription updated", member: dumps(member)}), 202
         else:
             return "No such member", 401
@@ -412,7 +412,7 @@ def deny_user():
                             vapid_claims=VAPID_CLAIMS)
             except WebPushException as ex:
                 print("user subscription is offline")
-                db.Members.find_one_and_update({'name': member['name'], 'email': member['email']}, {"$set": {"subscription": {}}})
+                db.awaitingMembers.find_one_and_update({'name': member['name'], 'email': member['email']}, {"$set": {"subscription": []}})
                 return "user removed from waiting list", 200
             return "user removed from waiting list", 200
         else:
