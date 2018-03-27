@@ -254,7 +254,7 @@ def add_user():
             db.Members.insert_one({
                 "name": member['name'],
                 "email": member['email'],
-                "subscription": [member['subscription_info']],
+                "subscription": [member['subscription']],
                 "loc": member['loc']
              })
             try:
@@ -282,13 +282,16 @@ def add_user():
 @app.route('/check_subscription', methods=['POST'])
 def check_subscription():
     headers = request.headers
-    if 'Name' in headers.keys() and 'Email' in headers.keys():
+    if 'Name' in headers.keys() and 'Email' in headers.keys() and 'Sub' in headers.keys():
         member = db.Members.find_one({'name': headers['name'], 'email': headers['email']})
         if member:
-            if len(member["subscription"]) > 0:
-                return "subscription exists", 200
-            else:
-                return "No subscription", 401
+            print headers['sub']
+            sub_from_client = loads(headers['sub'])
+
+            for sub in member["subscription"]:
+                if sub == sub_from_client:
+                    return "subscription exists", 200
+            return "No subscription", 401
         else:
             return "No member", 401
     else:
@@ -353,8 +356,9 @@ def get_user_reports():
 @app.route('/logout', methods=['POST'])
 def logout():
     headers = request.headers
-    if 'Name' in headers.keys() and 'Email' in headers.keys():
-        member = db.Members.find_one({"email": headers['email'], 'name': headers['name']}, return_document=ReturnDocument.AFTER)
+    if 'Name' in headers.keys() and 'Email' in headers.keys() and 'Sub' in headers.keys():
+        member = db.Members.find_one_and_update({"email": headers['email'], 'name': headers['name']},
+                                           {"$pull": {"subscription": loads(headers['Sub'])}},  return_document=ReturnDocument.AFTER)
         if member:
             return "Logout Successful", 200
         else:
@@ -412,7 +416,6 @@ def deny_user():
                             vapid_claims=VAPID_CLAIMS)
             except WebPushException as ex:
                 print("user subscription is offline")
-                db.awaitingMembers.find_one_and_update({'name': member['name'], 'email': member['email']}, {"$set": {"subscription": []}})
                 return "user removed from waiting list", 200
             return "user removed from waiting list", 200
         else:
@@ -470,7 +473,7 @@ def login():
     if 'Name' in headers.keys() and 'Email' in headers.keys() and 'Sub' in headers.keys():
         member = db.Members.find_one({"email": headers['email'], 'name': headers['name']})
         if member:
-            if loads(headers['sub']) in member['subscription']:
+            if loads(headers['sub']) == {} or loads(headers['sub']) in member['subscription']:
                 return dumps({'info': "user logged in", 'member': member}), 200
             else:
                 member = db.Members.find_one_and_update({'name': headers['name'], "email": headers['email']}, {"$push": {"subscription": loads(headers['sub'])}} , return_document=ReturnDocument.AFTER)
