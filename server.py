@@ -285,7 +285,6 @@ def check_subscription():
     if 'Name' in headers.keys() and 'Email' in headers.keys() and 'Sub' in headers.keys():
         member = db.Members.find_one({'name': headers['name'], 'email': headers['email']})
         if member:
-            print headers['sub']
             sub_from_client = loads(headers['sub'])
 
             for sub in member["subscription"]:
