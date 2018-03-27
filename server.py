@@ -373,7 +373,7 @@ def verify_user():
                 return dumps({'info': "user verified", 'member': dumps(member)}), 200
             else:
                 member = db.Members.find_one_and_update({'name': body_json['name'], "email": body_json['email']}, {"$push": {"subscription": loads(body_json['sub'])}} , return_document=ReturnDocument.AFTER)
-                return dumps({'info': "user subscription updated", member: dumps(member)}), 202
+                return dumps({'info': "user subscription updated", 'member': dumps(member)}), 202
         else:
             return "No such member", 401
     else:
