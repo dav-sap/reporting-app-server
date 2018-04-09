@@ -101,14 +101,15 @@ def send_push_msg_to_admins(name, email, loc, subscription_info):
             print("ADMIN: " + str(doc))
             try:
                 if doc["subscription"]:
-                    data_message = {
-                        "title": "User approval",
-                        "body": name + " , " + email + ", wants to register",
-                        "name": name,
-                        "email": email,
-                        "admin": True
-                    }
-                    webpush(doc["subscription"], json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS, timeout=10)
+                    for sub in doc["subscription"]:
+                        data_message = {
+                            "title": "User approval",
+                            "body": name + " , " + email + ", wants to register",
+                            "name": name,
+                            "email": email,
+                            "admin": True
+                        }
+                        webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS, timeout=10)
             except WebPushException as ex:
                 print("Admin subscription is offline")
 
