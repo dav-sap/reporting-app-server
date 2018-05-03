@@ -11,6 +11,7 @@ from bson.json_util import loads
 from bson.json_util import dumps
 from dateutil.parser import parse
 from datetime import datetime
+from datetime import timedelta
 # from apscheduler.schedulers.background import BackgroundScheduler
 # sched = BackgroundScheduler()
 # sched.start()
@@ -150,32 +151,16 @@ def get_members_status_by_date():
     if date:
         given_date = parse(date).strftime('%d/%m/%Y')
         members = db.Members.find({})
-        ooo = []
-        wf = []
-        sick = []
+        reports = []
         for member in members:
-            if 'OOO' in member.keys():
-                for item in member['OOO']:
+            if 'reports' in member.keys():
+                for item in member['reports']:
                     start_dt = parse(remove_time_zone(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
                     end_dt = parse(remove_time_zone(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
                     if datetime.strptime(start_dt, '%d/%m/%Y') <= datetime.strptime(given_date, '%d/%m/%Y')  <= datetime.strptime(end_dt, '%d/%m/%Y'):
                         item['name'] = member['name']
-                        ooo.append(item)
-            if 'WF' in member.keys():
-                for item in member['WF']:
-                    start_dt = parse(remove_time_zone(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
-                    end_dt = parse(remove_time_zone(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
-                    if datetime.strptime(start_dt, '%d/%m/%Y') <= datetime.strptime(given_date, '%d/%m/%Y') <= datetime.strptime(end_dt, '%d/%m/%Y'):
-                        item['name'] = member['name']
-                        wf.append(item)
-            if 'SICK' in member.keys():
-                for item in member['SICK']:
-                    start_dt = parse(remove_time_zone(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
-                    end_dt = parse(remove_time_zone(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
-                    if datetime.strptime(start_dt, '%d/%m/%Y') <= datetime.strptime(given_date, '%d/%m/%Y') <= datetime.strptime(end_dt, '%d/%m/%Y'):
-                        item['name'] = member['name']
-                        sick.append(item)
-        return dumps({'OOO': ooo, 'WF': wf, 'SICK': sick}), 200
+                        reports.append(item)
+        return dumps({'reports': reports}), 200
     else:
         return "Wrong Headers", 403
 
@@ -267,6 +252,7 @@ def add_user():
                         "body":  member["name"] + " , " + member["email"] + ", have has approved",
                         "admin": False,
                         "approved": True,
+                        "loc": member['loc'],
                         "sub": member["subscription"],
                     }
                     webpush(member["subscription"], json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS)
@@ -304,7 +290,7 @@ def add_subscription():
     if 'Name' in headers.keys() and 'Email' in headers.keys() and 'Sub' in headers.keys():
         member = db.Members.find_one_and_update({'name': headers['name'], 'email': headers['email']},{"$push": {"subscription": loads(headers['sub'] if headers['sub'] else {})}})
         if member:
-            return "Removed subscription", 200
+            return "subscription added", 200
         else:
             return "No such member", 401
     else:
@@ -326,10 +312,9 @@ def remove_subscription():
 
 @app.route('/remove_report', methods=['POST'])
 def remove_report():
-    headers = request.headers
-    if 'Name' in headers.keys() and 'Email' in headers.keys() and 'Report-Id' in headers.keys() and 'Status' in headers.keys():
-        id_obj = loads(headers['Report-Id'])
-        member = db.Members.find_one_and_update({'name': headers['name']}, {'$pull': {headers['status']: {'_id':id_obj }}}, return_document=ReturnDocument.AFTER)
+    body_json = request.get_json()
+    if 'name' in body_json.keys() and 'email' in body_json.keys() and 'report_id' in body_json.keys():
+        member = db.Members.find_one_and_update({'name': body_json['name'], 'email' : body_json['email']}, {'$pull': {'reports': {'_id':body_json['report_id']}}}, return_document=ReturnDocument.AFTER)
         if member:
             return "Report Removed", 200
         else:
@@ -344,9 +329,8 @@ def get_user_reports():
     if 'Name' in headers.keys() and 'Email' in headers.keys():
         member = db.Members.find_one({"email": headers['email'], 'name': headers['name']})
         if member:
-            return dumps({'OOO': member['OOO'] if 'OOO' in member.keys() else [],
-                               'WF':  member['WF'] if 'WF' in member.keys() else [],
-                               'SICK':  member['SICK'] if 'SICK' in member.keys() else []}), 200
+            list_to_ret = member['reports'] if 'reports' in member.keys() else []
+            return dumps(list_to_ret), 200
         else:
             return "No such member", 401
     else:
@@ -371,7 +355,7 @@ def logout():
 def verify_user():
     body_json = request.get_json()
     if 'name' in body_json.keys() and 'email' in body_json.keys():
-        member = db.Members.find_one({"email": body_json['email'], 'name': body_json['name']})
+        member = db.awaitingMembers.find_one({"email": body_json['email'], 'name': body_json['name']})
         if member:
             return dumps({'info': "user verified", 'member': dumps(member)}), 200
 
@@ -384,9 +368,20 @@ def verify_user():
 @app.route('/add_report', methods=['POST'])
 def add_report():
     body_json = request.get_json()
-    if 'name' in body_json.keys() and 'status' in body_json.keys() and 'startDate' in body_json.keys() and 'endDate' in body_json.keys() and 'note' in body_json.keys():
-        member = db.Members.find_one_and_update({'name': body_json['name']}, {'$push': {body_json['status']: {'startDate': body_json['startDate'], 'endDate': body_json['endDate'], 'note': body_json['note'],'_id': uuid.uuid4()}}}, return_document=ReturnDocument.AFTER)
+    if 'name' in body_json.keys() and 'status' in body_json.keys() and 'startDate' in body_json.keys() and 'endDate' in body_json.keys() \
+            and 'note' in body_json.keys() and 'repeat' in body_json.keys() and 'statusDesc' in body_json.keys():
+        member = db.Members.find_one({'name': body_json['name'], 'email' : body_json['email']})
         if member:
+            member_status = member['reports'] if 'reports' in member.keys() else []
+            start_date = datetime.strptime(str(body_json['startDate']), '%Y-%m-%dT%H:%M')
+            end_date = datetime.strptime(str(body_json['endDate']), '%Y-%m-%dT%H:%M')
+            report_id = uuid.uuid4()
+            for i in range(0, int(body_json['repeat']) + 1):
+                new_start_date = start_date + timedelta(weeks=i)
+                new_end_date = end_date + timedelta(weeks=i)
+                member_status.append({'startDate': new_start_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ'), 'endDate': new_end_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ'),'statusDescription': body_json['statusDesc'],
+                                      'note': body_json['note'], '_id': str(report_id), 'status': body_json['status'], 'recurring': True if int(body_json['repeat']) > 0 else False})
+            db.Members.find_one_and_update({'name': body_json['name']},{'$set': {'reports':member_status}})
             return "report added", 200
         else:
             return "User not found", 403
