@@ -351,8 +351,8 @@ def logout():
         return "Wrong Headers", 403
 
 
-@app.route('/verify_user', methods=['POST'])
-def verify_user():
+@app.route('/verify_await_user', methods=['POST'])
+def verify_await_user():
     body_json = request.get_json()
     if 'name' in body_json.keys() and 'email' in body_json.keys():
         member = db.awaitingMembers.find_one({"email": body_json['email'], 'name': body_json['name']})
