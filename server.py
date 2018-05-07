@@ -364,6 +364,18 @@ def verify_await_user():
     else:
         return "Wrong Headers", 403
 
+@app.route('/verify_user', methods=['POST'])
+def verify_user():
+    body_json = request.get_json()
+    if 'name' in body_json.keys() and 'email' in body_json.keys():
+        member = db.Members.find_one({"email": body_json['email'], 'name': body_json['name']})
+        if member:
+            return dumps({'info': "user verified", 'member': dumps(member)}), 200
+
+        else:
+            return "No such member", 401
+    else:
+        return "Wrong Headers", 403
 
 @app.route('/add_report', methods=['POST'])
 def add_report():
