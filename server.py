@@ -94,6 +94,28 @@ def create_admin(name, email, subscription_info, loc):
     return member
 
 
+@app.route('/send_push_testing', methods=['POST'])
+def send_push_testing():
+
+    admins = db.Members.find({"admin": True})
+    if admins and admins.count() > 0:
+        for doc in admins:
+            print("ADMIN: " + str(doc))
+            try:
+                if doc["subscription"]:
+                    for sub in doc["subscription"]:
+                        data_message = {
+                            "title": "Morning Report",
+                            "body": "testing"
+                        }
+                        webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS, timeout=10)
+            except WebPushException as ex:
+                print (ex)
+                print("Admin subscription is offline")
+        return "success", 200
+    else:
+        return "no admins", 400
+
 def send_push_msg_to_admins(name, email, loc, subscription_info):
 
     admins = db.Members.find({"admin": True})
@@ -205,6 +227,23 @@ def get_awaiting_members():
     for member in members:
         members_to_return.append(member)
     return dumps({'members': members_to_return}), 200
+
+
+@app.route('/add_arriving', methods=['POST'])
+def add_arriving():
+    body_json = request.get_json()
+    if 'name' in body_json.keys():
+        if db.Arriving.find_one_and_update({"date": str(datetime.now().date())}, {"$push": {"members":body_json['name']}}):
+            return "arriving added", 200
+        else:
+            db.Arriving.insert_one({"date": str(datetime.now().date()), "members": [body_json['name']]})
+            return "arriving added", 200
+
+
+@app.route('/get_arriving', methods=['GET'])
+def get_arriving():
+    arriving = db.Arriving.find_one({"date": str(datetime.now().date())})
+    return dumps(arriving), 200
 
 
 @app.route('/add_user', methods=['POST'])
