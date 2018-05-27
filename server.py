@@ -38,7 +38,7 @@ else:
     connection = MongoClient(os.environ.get('MONGODB_URI'))
     VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
     VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
-    VAPID_CLAIMS = dict(os.environ.get('VAPID_CLAIMS'))
+    VAPID_CLAIMS = loads(os.environ.get('VAPID_CLAIMS'))
     ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD')
 print (str(os.environ.get('FCM_API_KEY')))
 print (str(os.environ.get('MONGODB_URI')))
