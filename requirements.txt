@@ -28,8 +28,6 @@ requests-toolbelt
 six
 urllib3
 pywebpush
-bcrypt
-re
 passlib
 Flask-Mail
 apscheduler
