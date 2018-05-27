@@ -1,6 +1,8 @@
 import os
 from flask import Flask, send_from_directory, request
 from flask_cors import CORS, cross_origin
+import string
+import random
 import json
 import uuid
 import re
@@ -23,7 +25,7 @@ VAPID_PRIVATE_KEY = None
 VAPID_PUBLIC_KEY = None
 VAPID_CLAIMS = None
 ADMIN_PASSWORD = None
-if sys.argv[1] == 'local':
+if len(sys.argv) > 1 and sys.argv[1] == 'local':
     import LocalHostConst
     push_service = FCMNotification(api_key=LocalHostConst.FCM_API_KEY)
     connection = MongoClient(LocalHostConst.MONGO_URL)
@@ -52,6 +54,10 @@ mail.init_app(app)
 
 db = connection['flex-app']
 CORS(app)
+
+
+def id_generator(size=10, chars=string.ascii_uppercase + string.digits):
+    return ''.join(random.choice(chars) for _ in range(size))
 
 
 @app.route('/push_to_all', methods=['POST'])
