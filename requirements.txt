@@ -30,5 +30,6 @@ urllib3
 pywebpush
 passlib
 Flask-Mail
+flask_httpauth
 apscheduler
 Werkzeug
