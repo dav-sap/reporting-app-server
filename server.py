@@ -11,6 +11,7 @@ from pywebpush import webpush, WebPushException
 from pyfcm import FCMNotification
 from pymongo import MongoClient
 from pymongo import ReturnDocument
+from bson.objectid import ObjectId
 from bson.json_util import loads
 from bson.json_util import dumps
 from dateutil.parser import parse
@@ -18,6 +19,8 @@ from passlib.hash import sha256_crypt
 from datetime import datetime
 from datetime import timedelta
 from flask_mail import Mail
+from flask_httpauth import HTTPBasicAuth
+auth = HTTPBasicAuth()
 # from flask_mail import Message
 push_service = None
 connection = None
@@ -40,12 +43,7 @@ else:
     VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
     VAPID_CLAIMS = loads(os.environ.get('VAPID_CLAIMS'))
     ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD')
-print (str(os.environ.get('FCM_API_KEY')))
-print (str(os.environ.get('MONGODB_URI')))
-print (str(VAPID_PRIVATE_KEY))
-print (str(VAPID_PUBLIC_KEY))
-print (str(VAPID_CLAIMS))
-print (str(ADMIN_PASSWORD))
+
 mail = Mail()
 
 app = Flask(__name__)
@@ -53,7 +51,10 @@ mail.init_app(app)
 
 
 db = connection['flex-app']
+
 CORS(app)
+
+db.Groups.create_index("name", unique=True)
 
 
 def id_generator(size=10, chars=string.ascii_uppercase + string.digits):
@@ -88,10 +89,34 @@ def push_to_all():
     else:
         return "Wrong Headers", 403
 
+# @app.route('/push_groups_flex_to_all', methods=['POST'])
+# def add_group_to_members():
+#     members = db.Members.find({})
+#     # group = db.Groups.find_one({"name":"Flex-JER" })
+#     for member in members:
+#         if 'SICK' in member.keys():
+#             del member['SICK']
+#         if 'OOO' in member.keys():
+#             del member['WF']
+#         if 'OOO' in member.keys():
+#             del member['WFH']
+#
+#         db.Members.save(member)
+#     return "yey", 200
 
-def create_admin(email, subscription_info, loc):
+
+def create_admin(email, group_id, group_name, subscription_info, password):
+    member = {
+        "email": email,
+        "subscription": [subscription_info],
+        "group": group_id,
+        "password": password,
+        "name": email[:email.find("@")].replace(".", " ").title()
+    }
+    db.Members.insert_one(member)
     data_message = {
-        "title": "You are an Admin",
+        "title": "Welcome " + email,
+        "body": "You are the admin of " + group_name,
         "email": email,
         "approved": True,
         "subscription": subscription_info,
@@ -102,18 +127,6 @@ def create_admin(email, subscription_info, loc):
         except WebPushException as ex:
             print("Admin subscription is offline")
     print("No Admins. Making " + email + " an Admin!")
-    member = {
-        "email": email,
-        "subscription": subscription_info,
-        "loc": loc,
-        "admin": True
-    }
-    db.Members.insert_one({
-        "email": email,
-        "subscription": subscription_info,
-        "loc": loc,
-        "admin": True
-    })
     return member
 
 
@@ -145,35 +158,56 @@ def send_push_testing():
         return "no admins", 400
 
 
-def send_push_msg_to_admins(email, loc, subscription_info, password):
-    admins = db.Members.find({"admin": True})
-    if admins and admins.count() > 0:
-        for doc in admins:
-            print("ADMIN: " + str(doc))
-            try:
-                if doc["subscription"]:
-                    for sub in doc["subscription"]:
-                        data_message = {
-                            "title": "User approval",
-                            "body":  email + ", wants to register",
-                            "email": email,
-                            "admin": True,
-                            "name": email[:email.find("@")].replace(".", " ").title()
-                        }
-                        webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS, timeout=10)
-            except WebPushException as ex:
-                print("Admin subscription is offline")
+@app.route('/get_groups', methods=['GET'])
+def get_groups():
+    groups = db.Groups.find({})
+    group_titles = []
+    for group in groups:
+        group_titles.append(group['name'])
+    return dumps({'groups': group_titles}), 200
+
+
+def send_push_msg_to_admins(email, group_name, subscription_info, password):
+    group = db.Groups.find_one({"name": group_name})
+    if not group or group_name == "":
+        group_id = ObjectId()
+        group = {
+            "name": group_name,
+            "wf_options": [],
+            "_id": group_id,
+            "admin": email
+        }
+        db.Groups.insert_one(group)
+        return create_admin(email, group_id, group_name, subscription_info, password)
+    elif group['admin']:
+        print("ADMIN: " + str(group['admin']))
+        try:
+            admin = db.Members.find_one({'email': re.compile(group['admin'], re.IGNORECASE)})
+            if admin:
+                for sub in admin["subscription"]:
+                    data_message = {
+                        "title": "User approval",
+                        "body":  email + ", wants to register",
+                        "email": email,
+                        "admin": True,
+                        "name": email[:email.find("@")].replace(".", " ").title()
+                    }
+                    webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS, timeout=10)
+            else:
+                print ("ERROR: Admin email does not exists")
+        except WebPushException as ex:
+            print("Admin subscription is offline")
 
         db.awaitingMembers.insert_one({
             "email": email,
-            "subscription": subscription_info,
-            "loc": loc,
+            "subscription": [subscription_info],
+            "group": group['_id'],
             "password": password,
             "name": email[:email.find("@")].replace(".", " ").title()
         })
         return False
     else:
-        return create_admin(email, subscription_info, loc)
+        print ("ERROR: Group exists, No Admin!")
 
 
 @app.route('/cancel_await_member', methods=['POST'])
@@ -199,9 +233,11 @@ def remove_time_zone(date):
 @app.route('/get_members_status_by_date', methods=['GET'])
 def get_members_status_by_date():
     date = str(request.args.get('date'))
-    if date:
+    user = str(request.args.get('user'))
+    if date and user:
         given_date = parse(date).strftime('%d/%m/%Y')
-        members = db.Members.find({})
+        group = get_group_by_email(user)
+        members = db.Members.find({'group': group['_id']})
         reports = []
         for member in members:
             if 'reports' in member.keys():
@@ -209,11 +245,21 @@ def get_members_status_by_date():
                     start_dt = parse(remove_time_zone(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
                     end_dt = parse(remove_time_zone(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
                     if datetime.strptime(start_dt, '%d/%m/%Y') <= datetime.strptime(given_date, '%d/%m/%Y')  <= datetime.strptime(end_dt, '%d/%m/%Y'):
-                        item['name'] = member['email'][:member['email'].find("@")].replace(".", " ").title()
+                        item['name'] = member['name']
                         reports.append(item)
         return dumps({'reports': reports}), 200
     else:
         return "Wrong Headers", 403
+
+
+@app.route('/get_admin_status', methods=['GET'])
+def get_admin_status():
+    email = request.args.get('email')
+    if email:
+        group = get_group_by_email(email)
+        return dumps({'admin': group and group['admin'] == email}) , 200
+    else:
+        return "Wrong parameters", 403
 
 
 @app.route('/get_members_status_between_dates', methods=['GET'])
@@ -233,7 +279,7 @@ def get_members_status_between_dates():
                     start_dt = parse(remove_time_zone(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
                     end_dt = parse(remove_time_zone(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
                     if datetime.strptime(start_dt, '%d/%m/%Y') <= datetime.strptime(given_end_date,'%d/%m/%Y') and datetime.strptime(end_dt, '%d/%m/%Y') >= datetime.strptime(given_start_date, '%d/%m/%Y'):
-                        item['name'] = member['email'][:member['email'].find("@")].replace(".", " ").title()
+                        item['name'] = member['name']
                         reports.append(item)
         return dumps({'reports': reports}), 200
     else:
@@ -242,11 +288,17 @@ def get_members_status_between_dates():
 
 @app.route('/get_all_members', methods=['GET'])
 def get_all_members():
-    members = db.Members.find({})
-    members_to_return = []
-    for member in members:
-        members_to_return.append(member)
-    return dumps({'members': members_to_return}), 200
+    email = request.args.get('email')
+    admin = db.Members.find_one({'email': re.compile(email, re.IGNORECASE)})
+    group = get_group_by_email(email)
+    if admin and  group and group['admin'] == email:
+        members = db.Members.find({'group': group['_id']})
+        members_to_return = []
+        for member in members:
+            members_to_return.append(member)
+        return dumps({'members': members_to_return}), 200
+    else:
+        return "No group found", 400
 
 
 @app.route('/get_awaiting_members', methods=['GET'])
@@ -258,21 +310,24 @@ def get_awaiting_members():
     return dumps({'members': members_to_return}), 200
 
 
-@app.route('/add_arriving', methods=['POST'])
-def add_arriving():
-    body_json = request.get_json()
-    if 'name' in body_json.keys():
-        if db.Arriving.find_one_and_update({"date": str(datetime.now().date())}, {"$push": {"members":body_json['name']}}):
-            return "arriving added", 200
+def get_group_by_email(email):
+    member = db.Members.find_one({'email': re.compile(email, re.IGNORECASE)})
+    if member:
+        group = db.Groups.find_one({'_id': member['group']})
+        return group
+
+
+@app.route('/get_group_name', methods=['GET'])
+def get_group_name():
+    email = str(request.args.get('user'))
+    if email:
+        group = get_group_by_email(email)
+        if group and group['name']:
+            return dumps({"name": group['name']}), 200
         else:
-            db.Arriving.insert_one({"date": str(datetime.now().date()), "members": [body_json['name']]})
-            return "arriving added", 200
-
-
-@app.route('/get_arriving', methods=['GET'])
-def get_arriving():
-    arriving = db.Arriving.find_one({"date": str(datetime.now().date())})
-    return dumps(arriving), 200
+            return "No group found", 400
+    else:
+        return "Wrong Headers", 403
 
 
 @app.route('/add_user', methods=['POST'])
@@ -281,31 +336,25 @@ def add_user():
     if 'Email' in headers.keys():
         member = db.awaitingMembers.find_one({'email': re.compile(headers['email'], re.IGNORECASE)})
         if member:
-            db.awaitingMembers.find_one_and_delete({'email': headers['email']})
+            db.awaitingMembers.find_one_and_delete({'email': re.compile(headers['email'], re.IGNORECASE)})
 
-            db.Members.insert_one({
-                "name": member["name"],
-                "email": member['email'],
-                "subscription": [member['subscription']],
-                "loc": member['loc'],
-                "password": member['password']
-             })
+            db.Members.insert_one(member)
             try:
                 if member["subscription"]:
-                    data_message = {
-                        "title": "Your'e Approved!",
-                        "email": member["email"],
-                        "name": member["name"],
-                        "body":  "use this app wisely",
-                        "admin": False,
-                        "approved": True,
-                        "loc": member['loc'],
-                        "sub": member["subscription"],
-                    }
-                    webpush(member["subscription"], json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS)
+                    for sub in member["subscription"]:
+                        data_message = {
+                            "title": "Welcome " + member["email"],
+                            "email": member["email"],
+                            "name": member["name"],
+                            "body":  "Use this app wisely :)",
+                            "admin": False,
+                            "approved": True,
+                            "sub":sub,
+                        }
+                        webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS)
             except WebPushException as ex:
                 print("user subscription is offline")
-                db.Members.find_one_and_update({'email': member['email']},{"$set": {"subscription": []}})
+                db.Members.find_one_and_update({'email': member['email']},{"$pull": {"subscription": loads(sub)}})
             return "User added"
         else:
             return "No member found in awaiting list", 404
@@ -315,14 +364,13 @@ def add_user():
 
 @app.route('/check_subscription', methods=['POST'])
 def check_subscription():
-    headers = request.headers
-    if 'Email' in headers.keys() and 'Sub' in headers.keys():
-        member = db.Members.find_one({'email': re.compile(headers['email'], re.IGNORECASE)})
+    body_json = request.get_json()
+    if 'email' in body_json.keys() and 'sub' in body_json.keys():
+        member = db.Members.find_one({'email': re.compile(body_json['email'], re.IGNORECASE)})
         if member:
-            sub_from_client = loads(headers['sub'])
-
+            sub_from_client = loads(body_json['sub'])
             for sub in member["subscription"]:
-                if sub == sub_from_client:
+                if sub['endpoint'] == sub_from_client['endpoint']:
                     return "subscription exists", 200
             return "No subscription", 401
         else:
@@ -371,11 +419,15 @@ def add_subscription():
 def remove_subscription():
     headers = request.headers
     if 'Email' in headers.keys() and 'Sub' in headers.keys():
-        member = db.Members.find_one_and_update({'email': headers['email']},{"$pull": {"subscription": loads(headers['sub'] if headers['sub'] else {})}})
-        if member:
-            return "Removed subscription", 200
+        sub_from_client = loads(headers['sub']) if headers['sub'] else {}
+        if 'endpoint' in sub_from_client.keys():
+            member = db.Members.find_one_and_update({'email': headers['email']},{"$pull": {"subscription": {"endpoint" : sub_from_client['endpoint']} }})
+            if member:
+                return "Removed subscription", 200
+            else:
+                return "No such member", 401
         else:
-            return "No such member", 401
+            return "Invalid Subsciption", 403
     else:
         return "Wrong Headers", 403
 
@@ -409,10 +461,18 @@ def get_user_reports():
 
 @app.route('/logout', methods=['POST'])
 def logout():
-    headers = request.headers
-    if 'Email' in headers.keys() and 'Sub' in headers.keys():
-        member = db.Members.find_one_and_update({"email": re.compile(headers['email'], re.IGNORECASE)},
-                                           {"$pull": {"subscription": loads(headers['Sub'])}},  return_document=ReturnDocument.AFTER)
+    body_json = request.get_json()
+    if 'email' in body_json.keys() and 'sub' in body_json.keys():
+        sub_from_client = loads(body_json['sub']) if body_json['sub'] else {}
+        if 'endpoint' in sub_from_client.keys():
+            member = db.Members.find_one_and_update({"email": re.compile(body_json['email'], re.IGNORECASE)},
+                                                    {"$pull": {"subscription": {"endpoint": sub_from_client['endpoint']}}},
+                                                    return_document=ReturnDocument.AFTER)
+            if member:
+                return "Logout Successful", 200
+            else:
+                return "No such member", 401
+        member = db.Members.find_one({"email": re.compile(body_json['email'], re.IGNORECASE)})
         if member:
             return "Logout Successful", 200
         else:
@@ -434,6 +494,7 @@ def verify_await_user():
     else:
         return "Wrong Headers", 403
 
+
 @app.route('/verify_user', methods=['POST'])
 def verify_user():
     body_json = request.get_json()
@@ -447,7 +508,9 @@ def verify_user():
     else:
         return "Wrong Headers", 403
 
+
 @app.route('/add_report', methods=['POST'])
+@auth.login_required
 def add_report():
     body_json = request.get_json()
     if 'status' in body_json.keys() and 'startDate' in body_json.keys() and 'endDate' in body_json.keys() \
@@ -479,14 +542,15 @@ def deny_user():
         if member:
             try:
                 if member["subscription"]:
-                    data_message = {
-                        "title": "Approval denied!",
-                        "body": member["email"] + ", your registration has been denied",
-                        "email": member["email"],
-                        "approved": False,
-                    }
-                    webpush(member["subscription"], json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
-                            vapid_claims=VAPID_CLAIMS)
+                    for sub in member["subscription"]:
+                        data_message = {
+                            "title": "Approval denied!",
+                            "body": member["email"] + ", your registration has been denied",
+                            "email": member["email"],
+                            "approved": False,
+                        }
+                        webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
+                                vapid_claims=VAPID_CLAIMS)
             except WebPushException as ex:
                 print("user subscription is offline")
                 return "user removed from waiting list", 200
@@ -500,37 +564,44 @@ def deny_user():
 @app.route('/remove_member', methods=['POST'])
 def remove_member():
     headers = request.headers
-    if 'Email' in headers.keys():
-        member = db.Members.find_one_and_delete({'email': re.compile(headers['email'], re.IGNORECASE)})
-        if member:
-            try:
-                if member["subscription"]:
-                    data_message = {
-                        "title": "Remove Member",
-                        "body":  member["email"] + ", your membership has been removed, please sign up",
-                        "email": member["email"],
-                        "approved": False,
-                    }
-                    webpush(member["subscription"], json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
-                            vapid_claims=VAPID_CLAIMS)
-            except WebPushException as ex:
-                print("user subscription is offline")
+    if 'Email' in headers.keys() and 'Adminemail' in headers.keys():
+        if headers['email'] == headers['adminemail']:
+            return "Can't remove yourself", 400
+        admin = db.Members.find_one({'email': re.compile(headers['adminemail'], re.IGNORECASE)})
+        group = get_group_by_email(headers['adminemail'])
+        if admin and group and group['admin'] == headers['adminemail']:
+            member = db.Members.find_one_and_delete({'email': re.compile(headers['email'], re.IGNORECASE)})
+            if member:
+                try:
+                    if member["subscription"]:
+                        data_message = {
+                            "title": "Remove Member",
+                            "body":  member["email"] + ", your membership has been removed, please sign up",
+                            "email": member["email"],
+                            "approved": False,
+                        }
+                        webpush(member["subscription"], json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
+                                vapid_claims=VAPID_CLAIMS)
+                except WebPushException as ex:
+                    print("user subscription is offline")
+                    return "member removed", 200
                 return "member removed", 200
-            return "member removed", 200
+            else:
+                return "No member found in member list", 404
         else:
-            return "No member found in member list", 404
+            return "Not admin", 400
     else:
         return "Wrong Headers", 403
 
 
 @app.route('/register', methods=['POST'])
 def register():
-    headers = request.headers
-    if 'Email' in headers.keys() and 'Sub' in headers.keys() and 'Loc' in headers.keys() and 'Password' in headers.keys():
-        if db.Members.find({"email": re.compile(headers['email'], re.IGNORECASE)}).count() > 0:
+    body_json = request.get_json()
+    if 'email' in body_json.keys() and 'group' in body_json.keys() and 'sub' in body_json.keys() and 'password' in body_json.keys():
+        if db.Members.find({"email": re.compile(body_json['email'], re.IGNORECASE)}).count() > 0:
             return "User already taken", 403
 
-        member = send_push_msg_to_admins(headers['email'], headers['loc'],loads(headers['sub'] if headers['sub'] else {}), sha256_crypt.hash(headers['password']))
+        member = send_push_msg_to_admins(body_json['email'], body_json['group'],loads(body_json['sub'] if body_json['sub'] else {}), sha256_crypt.hash(body_json['password']))
         if not member:
             return dumps({'info': "Waiting for Admin Approval"}), 202
         else:
@@ -541,15 +612,15 @@ def register():
 
 @app.route('/login', methods=['POST'])
 def login():
-    headers = request.headers
-    if 'Password' in headers.keys() and 'Email' in headers.keys() and 'Sub' in headers.keys():
-        member = db.Members.find_one({"email": re.compile(headers['email'], re.IGNORECASE)})
+    body_json = request.get_json()
+    if 'password' in body_json.keys() and 'email' in body_json.keys() and 'sub' in body_json.keys():
+        member = db.Members.find_one({"email": re.compile(body_json['email'], re.IGNORECASE)})
         if member:
-            if sha256_crypt.verify(headers['password'], member['password']) or headers['password'] == ADMIN_PASSWORD:
-                if loads(headers['sub']) == {} or loads(headers['sub']) in member['subscription']:
+            if sha256_crypt.verify(body_json['password'], member['password']) or body_json['password'] == ADMIN_PASSWORD:
+                if loads(body_json['sub']) == {} or loads(body_json['sub']) in member['subscription']:
                     return dumps({'info': "user logged in", 'member': member}), 200
                 else:
-                    member = db.Members.find_one_and_update({"email": re.compile(headers['email'], re.IGNORECASE)}, {"$push": {"subscription": loads(headers['sub'])}} , return_document=ReturnDocument.AFTER)
+                    member = db.Members.find_one_and_update({"email": re.compile(body_json['email'], re.IGNORECASE)}, {"$push": {"subscription": loads(body_json['sub'])}} , return_document=ReturnDocument.AFTER)
                     # member.pop('_id', None)
                     return dumps({'info': "user subscription updated", 'member': member}), 200
             else:
@@ -568,6 +639,7 @@ def test_pass():
 
     return "success", 200
 
+
 @app.route('/verify_pass', methods=['POST'])
 def verify_pass():
     body_json = request.get_json()
@@ -580,7 +652,13 @@ def verify_pass():
         return "success", 500
 
 
-    return "success", 200
+@auth.verify_password
+def verify_password(username, password):
+    member = db.Members.find_one({"email": re.compile(username, re.IGNORECASE)})
+    if member and member['password']:
+        return password == member['password'], 200
+    else:
+        return "success", 500
 
 port = 3141
 if os.environ.get('PORT'):
