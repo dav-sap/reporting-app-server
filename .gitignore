@@ -6,3 +6,6 @@
 
 *.pyc
 LocalHostConst.py
+del-heroku-apps.sh
+private_key.txt
+public_key.txt

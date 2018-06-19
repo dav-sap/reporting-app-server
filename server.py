@@ -237,17 +237,20 @@ def get_members_status_by_date():
     if date and user:
         given_date = parse(date).strftime('%d/%m/%Y')
         group = get_group_by_email(user)
-        members = db.Members.find({'group': group['_id']})
-        reports = []
-        for member in members:
-            if 'reports' in member.keys():
-                for item in member['reports']:
-                    start_dt = parse(remove_time_zone(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
-                    end_dt = parse(remove_time_zone(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
-                    if datetime.strptime(start_dt, '%d/%m/%Y') <= datetime.strptime(given_date, '%d/%m/%Y')  <= datetime.strptime(end_dt, '%d/%m/%Y'):
-                        item['name'] = member['name']
-                        reports.append(item)
-        return dumps({'reports': reports}), 200
+        if group and '_id' in group.keys():
+            members = db.Members.find({'group': group['_id']})
+            reports = []
+            for member in members:
+                if 'reports' in member.keys():
+                    for item in member['reports']:
+                        start_dt = parse(remove_time_zone(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
+                        end_dt = parse(remove_time_zone(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
+                        if datetime.strptime(start_dt, '%d/%m/%Y') <= datetime.strptime(given_date, '%d/%m/%Y')  <= datetime.strptime(end_dt, '%d/%m/%Y'):
+                            item['name'] = member['name']
+                            reports.append(item)
+            return dumps({'reports': reports}), 200
+        else:
+            return "No User", 401
     else:
         return "Wrong Headers", 403
 
