@@ -181,10 +181,11 @@ def send_push_msg_to_admins(email, group_name, subscription_info, password):
         return create_admin(email, group_id, group_name, subscription_info, password)
     elif group['admin']:
         print("ADMIN: " + str(group['admin']))
-        try:
-            admin = db.Members.find_one({'email': re.compile(group['admin'], re.IGNORECASE)})
-            if admin:
-                for sub in admin["subscription"]:
+
+        admin = db.Members.find_one({'email': re.compile(group['admin'], re.IGNORECASE)})
+        if admin:
+            for sub in admin["subscription"]:
+                try:
                     data_message = {
                         "title": "User approval",
                         "body":  email + ", wants to register",
@@ -192,11 +193,11 @@ def send_push_msg_to_admins(email, group_name, subscription_info, password):
                         "admin": True,
                         "name": email[:email.find("@")].replace(".", " ").title()
                     }
-                    webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS, timeout=10)
-            else:
-                print ("ERROR: Admin email does not exists")
-        except WebPushException as ex:
-            print("Admin subscription is offline")
+                    webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS)
+                except WebPushException as ex:
+                    print("Admin subscription is offline")
+        else:
+            print ("ERROR: Admin email does not exists")
 
         db.awaitingMembers.insert_one({
             "email": email,
