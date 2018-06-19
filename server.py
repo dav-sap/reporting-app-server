@@ -342,22 +342,22 @@ def add_user():
             db.awaitingMembers.find_one_and_delete({'email': re.compile(headers['email'], re.IGNORECASE)})
 
             db.Members.insert_one(member)
-            try:
-                if member["subscription"]:
-                    for sub in member["subscription"]:
-                        data_message = {
-                            "title": "Welcome " + member["email"],
-                            "email": member["email"],
-                            "name": member["name"],
-                            "body":  "Use this app wisely :)",
-                            "admin": False,
-                            "approved": True,
-                            "sub":sub,
-                        }
-                        webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS)
-            except WebPushException as ex:
-                print("user subscription is offline")
-                db.Members.find_one_and_update({'email': member['email']},{"$pull": {"subscription": loads(sub)}})
+            for sub in member["subscription"]:
+                try:
+                    data_message = {
+                        "title": "Welcome " + member["email"],
+                        "email": member["email"],
+                        "name": member["name"],
+                        "body":  "Use this app wisely :)",
+                        "admin": False,
+                        "approved": True,
+                        "sub":sub,
+                    }
+                    webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS)
+                except WebPushException as ex:
+                    print("user subscription is offline")
+                    if 'endpoint' in sub.keys():
+                        db.Members.find_one_and_update({'email': headers['email']}, {"$pull": {"subscription": {"endpoint": sub['endpoint']}}})
             return "User added"
         else:
             return "No member found in awaiting list", 404
@@ -466,7 +466,7 @@ def get_user_reports():
 def logout():
     body_json = request.get_json()
     if 'email' in body_json.keys() and 'sub' in body_json.keys():
-        sub_from_client = loads(body_json['sub']) if body_json['sub'] else {}
+        sub_from_client = loads(body_json['sub']) if 'sub' in body_json.keys() else {}
         if 'endpoint' in sub_from_client.keys():
             member = db.Members.find_one_and_update({"email": re.compile(body_json['email'], re.IGNORECASE)},
                                                     {"$pull": {"subscription": {"endpoint": sub_from_client['endpoint']}}},
