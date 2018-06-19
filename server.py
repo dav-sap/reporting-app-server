@@ -169,7 +169,7 @@ def get_groups():
 
 def send_push_msg_to_admins(email, group_name, subscription_info, password):
     group = db.Groups.find_one({"name": group_name})
-    if not group or group_name == "":
+    if not group:
         group_id = ObjectId()
         group = {
             "name": group_name,
@@ -467,7 +467,7 @@ def get_user_reports():
 def logout():
     body_json = request.get_json()
     if 'email' in body_json.keys() and 'sub' in body_json.keys():
-        sub_from_client = loads(body_json['sub']) if 'sub' in body_json.keys() else {}
+        sub_from_client = loads(body_json['sub']) if body_json['sub'] else {}
         if 'endpoint' in sub_from_client.keys():
             member = db.Members.find_one_and_update({"email": re.compile(body_json['email'], re.IGNORECASE)},
                                                     {"$pull": {"subscription": {"endpoint": sub_from_client['endpoint']}}},
