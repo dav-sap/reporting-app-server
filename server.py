@@ -18,17 +18,23 @@ from dateutil.parser import parse
 from passlib.hash import sha256_crypt
 from datetime import datetime
 from datetime import timedelta
-from flask_mail import Mail
+# from flask_mail import Mail, Message
 from flask_httpauth import HTTPBasicAuth
+from googleapiclient.discovery import build
+from httplib2 import Http
+from oauth2client import file, client, tools
+
 auth = HTTPBasicAuth()
-# from flask_mail import Message
+
+calendar_api_service = None
 push_service = None
 connection = None
 VAPID_PRIVATE_KEY = None
 VAPID_PUBLIC_KEY = None
 VAPID_CLAIMS = None
 ADMIN_PASSWORD = None
-if len(sys.argv) > 1 and sys.argv[1] == 'local':
+GOOGLE_API_CALENDER_CREDS = None
+if len(sys.argv) > 1 and sys.argv[1] == '--local':
     import LocalHostConst
     push_service = FCMNotification(api_key=LocalHostConst.FCM_API_KEY)
     connection = MongoClient(LocalHostConst.MONGO_URL)
@@ -36,6 +42,7 @@ if len(sys.argv) > 1 and sys.argv[1] == 'local':
     VAPID_PUBLIC_KEY = LocalHostConst.VAPID_PUBLIC_KEY
     VAPID_CLAIMS = LocalHostConst.VAPID_CLAIMS
     ADMIN_PASSWORD = LocalHostConst.ADMIN_PASSWORD
+    GOOGLE_API_CALENDER_CREDS = LocalHostConst.GOOGLE_API_CALENDER_CREDS
 else:
     push_service = FCMNotification(api_key=os.environ.get('FCM_API_KEY'))
     connection = MongoClient(os.environ.get('MONGODB_URI'))
@@ -43,11 +50,9 @@ else:
     VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
     VAPID_CLAIMS = loads(os.environ.get('VAPID_CLAIMS'))
     ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD')
-
-mail = Mail()
+    GOOGLE_API_CALENDER_CREDS = os.environ.get('GOOGLE_API_CALENDER_CREDS')
 
 app = Flask(__name__)
-mail.init_app(app)
 
 
 db = connection['flex-app']
@@ -55,6 +60,26 @@ db = connection['flex-app']
 CORS(app)
 
 db.Groups.create_index("name", unique=True)
+
+
+def init_calendar_api():
+    # Setup the Calendar API
+    try:
+        f = open("credentials.json", 'r')
+    except IOError:
+        f = open("credentials.json", 'w+')
+        f.write(str(GOOGLE_API_CALENDER_CREDS))
+        f.close()
+    SCOPES = 'https://www.googleapis.com/auth/calendar'
+    store = file.Storage('credentials.json')
+    creds = store.get()
+
+    if not creds or creds.invalid:
+        flow = client.flow_from_clientsecrets('client_secret.json', SCOPES)
+        flags = tools.argparser.parse_args(args=[])
+        creds = tools.run_flow(flow, store, flags)
+    global calendar_api_service
+    calendar_api_service = build('calendar', 'v3', http=creds.authorize(Http()))
 
 
 def id_generator(size=10, chars=string.ascii_uppercase + string.digits):
@@ -103,6 +128,46 @@ def push_to_all():
 #
 #         db.Members.save(member)
 #     return "yey", 200
+
+
+@app.route('/send_email', methods=['GET'])
+def send_email(status, status_desc, name, email, start_date, end_date, note, repeat, timezone, all_day):
+    event = {
+        'summary': name + ' is ' + status + " " + status_desc,
+        'location': '',
+        'description': note,
+        'start': {
+            'timeZone': timezone,
+        },
+        'end': {
+            'timeZone': timezone,
+        },
+        'attendees': [
+            {
+                'email': email,
+                'organizer': False,
+                'responseStatus': 'needsAction'
+            }
+        ],
+        'reminders': {
+            'useDefault': False,
+            'overrides': [
+                # {'method': 'email', 'minutes': 24 * 60},
+                {'method': 'popup', 'minutes': 60},
+            ],
+        },
+    }
+    if all_day:
+        event['start']['date'] = start_date[:start_date.find('T')]
+        event['end']['date'] = end_date[:end_date.find('T')]
+    else:
+        event['start']['dateTime'] = start_date + ':00'
+        event['end']['dateTime'] = end_date + ':00'
+    if repeat > 0:
+        event['recurrence'] = 'RRULE:FREQ=WEEKLY;COUNT=' + str(repeat),
+    event = calendar_api_service.events().insert(calendarId='primary', body=event, sendNotifications=True).execute()
+
+    return "Sent"
 
 
 def create_admin(email, group_id, group_name, subscription_info, password):
@@ -518,7 +583,8 @@ def verify_user():
 def add_report():
     body_json = request.get_json()
     if 'status' in body_json.keys() and 'startDate' in body_json.keys() and 'endDate' in body_json.keys() \
-            and 'note' in body_json.keys() and 'repeat' in body_json.keys() and 'statusDesc' in body_json.keys():
+            and 'note' in body_json.keys() and 'repeat' in body_json.keys() and 'statusDesc' in body_json.keys()\
+            and 'timezone' in body_json.keys():
         member = db.Members.find_one({'email' : re.compile(body_json['email'], re.IGNORECASE)})
         if member:
             member_status = member['reports'] if 'reports' in member.keys() else []
@@ -531,6 +597,8 @@ def add_report():
                 member_status.append({'startDate': new_start_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ'), 'endDate': new_end_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ'),'statusDescription': body_json['statusDesc'],
                                       'note': body_json['note'], '_id': str(report_id), 'status': body_json['status'], 'recurring': True if int(body_json['repeat']) > 0 else False})
             db.Members.find_one_and_update({'email': re.compile(body_json['email'], re.IGNORECASE)},{'$set': {'reports':member_status}})
+            send_email(body_json['status'], body_json['statusDesc'], member['name'], member['email'], body_json['startDate'],
+                       body_json['endDate'], body_json['note'], body_json['repeat'], body_json['timezone'], body_json['allDay'])
             return "report added", 200
         else:
             return "User not found", 403
@@ -543,21 +611,19 @@ def deny_user():
     headers = request.headers
     if 'Email' in headers.keys():
         member = db.awaitingMembers.find_one_and_delete({'email': re.compile(headers['email'], re.IGNORECASE)})
-        if member:
-            try:
-                if member["subscription"]:
-                    for sub in member["subscription"]:
-                        data_message = {
-                            "title": "Approval denied!",
-                            "body": member["email"] + ", your registration has been denied",
-                            "email": member["email"],
-                            "approved": False,
-                        }
-                        webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
-                                vapid_claims=VAPID_CLAIMS)
-            except WebPushException as ex:
-                print("user subscription is offline")
-                return "user removed from waiting list", 200
+        if member and member["subscription"]:
+            for sub in member["subscription"]:
+                try:
+                    data_message = {
+                        "title": "Approval denied!",
+                        "body": member["email"] + ", your registration has been denied",
+                        "email": member["email"],
+                        "approved": False,
+                    }
+                    webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
+                            vapid_claims=VAPID_CLAIMS)
+                except WebPushException as ex:
+                    print("user subscription is offline")
             return "user removed from waiting list", 200
         else:
             return "No member found in awaiting list", 404
@@ -575,20 +641,19 @@ def remove_member():
         group = get_group_by_email(headers['adminemail'])
         if admin and group and group['admin'] == headers['adminemail']:
             member = db.Members.find_one_and_delete({'email': re.compile(headers['email'], re.IGNORECASE)})
-            if member:
-                try:
-                    if member["subscription"]:
+            if member and member["subscription"]:
+                for sub in member["subscription"]:
+                    try:
                         data_message = {
                             "title": "Remove Member",
                             "body":  member["email"] + ", your membership has been removed, please sign up",
                             "email": member["email"],
                             "approved": False,
                         }
-                        webpush(member["subscription"], json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
+                        webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
                                 vapid_claims=VAPID_CLAIMS)
-                except WebPushException as ex:
-                    print("user subscription is offline")
-                    return "member removed", 200
+                    except WebPushException as ex:
+                        print("user subscription is offline")
                 return "member removed", 200
             else:
                 return "No member found in member list", 404
@@ -663,9 +728,10 @@ def verify_password(username, password):
         return password == member['password'], 200
     else:
         return "success", 500
-
-port = 3141
-if os.environ.get('PORT'):
-    port = int(os.environ.get('PORT'))
-app.run(port=port, host='0.0.0.0')
+if __name__ == "__main__":
+    port = 3141
+    if os.environ.get('PORT'):
+        port = int(os.environ.get('PORT'))
+    init_calendar_api()
+    app.run(port=port, host='0.0.0.0')
 

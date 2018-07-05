@@ -24,6 +24,8 @@ pyparsing
 python-dateutil
 pytz
 requests
+oauth2client
+google-api-python-client
 requests-toolbelt
 six
 urllib3
