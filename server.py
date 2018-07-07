@@ -86,54 +86,50 @@ def id_generator(size=10, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
 
 
-@app.route('/push_to_all', methods=['POST'])
-def push_to_all():
-    headers = request.headers
-    if 'Msg-Title' in headers.keys() and 'Msg-Body' in headers.keys():
-        members = db.Members.find({})
-        if members and members.count() > 0:
-            for doc in members:
-
-                    if len(doc["subscription"]) > 0:
-                        data_message = {
-                            "title": headers['Msg-Body'],
-                            "body": headers['Msg-Body'],
-                            "admin_message": True
-                        }
-                        for sub in doc["subscription"]:
-                            try:
-                                webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
-                                        vapid_claims=VAPID_CLAIMS)
-                            except WebPushException as ex:
-                                print("subscription is offline")
-                                db.Members.find_one_and_update({'email': re.compile(doc['email'], re.IGNORECASE)},
-                                                               {"$pull": {"subscription": sub}})
-            return "sending push", 200
-        else:
-            return "No Members", 400
-    else:
-        return "Wrong Headers", 403
-
-# @app.route('/push_groups_flex_to_all', methods=['POST'])
-# def add_group_to_members():
+# @app.route('/push_to_all', methods=['POST'])
+# def push_to_all():
+#     headers = request.headers
+#     if 'Msg-Title' in headers.keys() and 'Msg-Body' in headers.keys():
+#         members = db.Members.find({})
+#         if members and members.count() > 0:
+#             for doc in members:
+#
+#                     if len(doc["subscription"]) > 0:
+#                         data_message = {
+#                             "title": headers['Msg-Body'],
+#                             "body": headers['Msg-Body'],
+#                             "admin_message": True
+#                         }
+#                         for sub in doc["subscription"]:
+#                             try:
+#                                 webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
+#                                         vapid_claims=VAPID_CLAIMS)
+#                             except WebPushException as ex:
+#                                 print("subscription is offline")
+#                                 db.Members.find_one_and_update({'email': re.compile(doc['email'], re.IGNORECASE)},
+#                                                                {"$pull": {"subscription": sub}})
+#             return "sending push", 200
+#         else:
+#             return "No Members", 400
+#     else:
+#         return "Wrong Headers", 403
+#
+# @app.route('/push_to_all_report', methods=['GET'])
+# def push_to_all_report():
 #     members = db.Members.find({})
 #     # group = db.Groups.find_one({"name":"Flex-JER" })
 #     for member in members:
-#         if 'SICK' in member.keys():
-#             del member['SICK']
-#         if 'OOO' in member.keys():
-#             del member['WF']
-#         if 'OOO' in member.keys():
-#             del member['WFH']
-#
-#         db.Members.save(member)
+#         if 'reports' in member.keys():
+#             for report in member['reports']:
+#                 report['allDay'] = True
+#                 db.Members.save(member)
 #     return "yey", 200
 
 
 @app.route('/send_email', methods=['GET'])
 def send_email(status, status_desc, name, email, start_date, end_date, note, repeat, timezone, all_day):
     event = {
-        'summary': name + ' is ' + status + " " + status_desc,
+        'summary': name + ' is ' + status + " " + (note if status_desc == "Free Style" else status_desc),
         'location': '',
         'description': note,
         'start': {
@@ -142,11 +138,13 @@ def send_email(status, status_desc, name, email, start_date, end_date, note, rep
         'end': {
             'timeZone': timezone,
         },
+        'displayName': name,
         'attendees': [
             {
                 'email': email,
-                'organizer': False,
-                'responseStatus': 'needsAction'
+                'responseStatus': 'needsAction',
+                'organizer': True,
+                'displayName': name
             }
         ],
         'reminders': {
@@ -158,8 +156,13 @@ def send_email(status, status_desc, name, email, start_date, end_date, note, rep
         },
     }
     if all_day:
-        event['start']['date'] = start_date[:start_date.find('T')]
-        event['end']['date'] = end_date[:end_date.find('T')]
+        new_start_date = start_date[:start_date.find('T')]
+        new_end_date = end_date[:end_date.find('T')]
+        if new_start_date != new_end_date:
+            new_end_date = datetime.strptime(new_end_date, '%Y-%m-%d') + timedelta(days=1)
+            new_end_date = new_end_date.strftime("%Y-%m-%d")
+        event['start']['date'] = new_start_date
+        event['end']['date'] = new_end_date
     else:
         event['start']['dateTime'] = start_date + ':00'
         event['end']['dateTime'] = end_date + ':00'
@@ -301,7 +304,6 @@ def get_members_status_by_date():
     date = str(request.args.get('date'))
     user = str(request.args.get('user'))
     if date and user:
-        given_date = parse(date).strftime('%d/%m/%Y')
         group = get_group_by_email(user)
         if group and '_id' in group.keys():
             members = db.Members.find({'group': group['_id']})
@@ -309,9 +311,20 @@ def get_members_status_by_date():
             for member in members:
                 if 'reports' in member.keys():
                     for item in member['reports']:
-                        start_dt = parse(remove_time_zone(item['startDate'])).strftime('%d/%m/%Y') if 'startDate' in item.keys() else "nothing"
-                        end_dt = parse(remove_time_zone(item['endDate'])).strftime('%d/%m/%Y') if 'endDate' in item.keys() else "nothing"
-                        if datetime.strptime(start_dt, '%d/%m/%Y') <= datetime.strptime(given_date, '%d/%m/%Y')  <= datetime.strptime(end_dt, '%d/%m/%Y'):
+                        given_date = None
+                        if 'allDay' in item and item['allDay']:
+                            given_date = datetime.strptime(date[:date.rfind('T')], '%Y-%m-%d')
+                            parsed_start_date = item['startDate'][:item['startDate'].rfind('T')]
+                            start_dt = datetime.strptime(parsed_start_date, '%Y-%m-%d')
+                            parsed_end_date = item['endDate'][:item['endDate'].rfind('T')]
+                            end_dt = datetime.strptime(parsed_end_date, '%Y-%m-%d')
+                        else:
+                            given_date = datetime.strptime(date[:date.rfind(':')], '%Y-%m-%dT%H:%M')
+                            parsed_start_date = item['startDate'][:item['startDate'].rfind(':')]
+                            start_dt = datetime.strptime(parsed_start_date, '%Y-%m-%dT%H:%M')
+                            parsed_end_date = item['endDate'][:item['endDate'].rfind(':')]
+                            end_dt = datetime.strptime(parsed_end_date, '%Y-%m-%dT%H:%M')
+                        if start_dt <= given_date <= end_dt:
                             item['name'] = member['name']
                             reports.append(item)
             return dumps({'reports': reports}), 200
@@ -584,7 +597,7 @@ def add_report():
     body_json = request.get_json()
     if 'status' in body_json.keys() and 'startDate' in body_json.keys() and 'endDate' in body_json.keys() \
             and 'note' in body_json.keys() and 'repeat' in body_json.keys() and 'statusDesc' in body_json.keys()\
-            and 'timezone' in body_json.keys():
+            and 'timezone' in body_json.keys() and 'allDay' in body_json.keys():
         member = db.Members.find_one({'email' : re.compile(body_json['email'], re.IGNORECASE)})
         if member:
             member_status = member['reports'] if 'reports' in member.keys() else []
@@ -594,11 +607,17 @@ def add_report():
             for i in range(0, int(body_json['repeat']) + 1):
                 new_start_date = start_date + timedelta(weeks=i)
                 new_end_date = end_date + timedelta(weeks=i)
-                member_status.append({'startDate': new_start_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ'), 'endDate': new_end_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ'),'statusDescription': body_json['statusDesc'],
-                                      'note': body_json['note'], '_id': str(report_id), 'status': body_json['status'], 'recurring': True if int(body_json['repeat']) > 0 else False})
+                member_status.append({'startDate': new_start_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
+                                      'endDate': new_end_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
+                                      'statusDescription': body_json['statusDesc'],
+                                      'note': body_json['note'], '_id': str(report_id),
+                                      'status': body_json['status'],
+                                      'allDay': body_json['allDay'],
+                                      'recurring': True if int(body_json['repeat']) > 0 else False})
             db.Members.find_one_and_update({'email': re.compile(body_json['email'], re.IGNORECASE)},{'$set': {'reports':member_status}})
-            send_email(body_json['status'], body_json['statusDesc'], member['name'], member['email'], body_json['startDate'],
-                       body_json['endDate'], body_json['note'], body_json['repeat'], body_json['timezone'], body_json['allDay'])
+            if body_json['status'] != 'Arriving':
+                send_email(body_json['status'], body_json['statusDesc'], member['name'], member['email'], body_json['startDate'],
+                           body_json['endDate'], body_json['note'], body_json['repeat'], body_json['timezone'], body_json['allDay'])
             return "report added", 200
         else:
             return "User not found", 403
