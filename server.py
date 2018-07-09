@@ -52,7 +52,7 @@ else:
     ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD')
     GOOGLE_API_CALENDER_CREDS = os.environ.get('GOOGLE_API_CALENDER_CREDS')
 
-app = Flask(__name__)
+app = Flask(__name__, static_url_path='/build')
 
 
 db = connection['flex-app']
@@ -125,6 +125,19 @@ def id_generator(size=10, chars=string.ascii_uppercase + string.digits):
 #                 db.Members.save(member)
 #     return "yey", 200
 
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def catch_all(path):
+    if path != "" and os.path.exists("build/" + path):
+        return send_from_directory('build', path)
+    else:
+        return send_from_directory('build', 'index.html')
+
+
+# @app.route('/')
+# @app.route('/where-is-everyone')
+# def root():
+#     return send_from_directory('build', 'index.html')
 
 @app.route('/send_email', methods=['GET'])
 def send_email(status, status_desc, name, email, start_date, end_date, note, repeat, timezone, all_day):
