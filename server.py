@@ -7,6 +7,8 @@ import json
 import uuid
 import re
 import sys
+import base64
+from email.mime.text import MIMEText
 from pywebpush import webpush, WebPushException
 from pyfcm import FCMNotification
 from pymongo import MongoClient
@@ -18,7 +20,6 @@ from dateutil.parser import parse
 from passlib.hash import sha256_crypt
 from datetime import datetime
 from datetime import timedelta
-# from flask_mail import Mail, Message
 from flask_httpauth import HTTPBasicAuth
 from googleapiclient.discovery import build
 from httplib2 import Http
@@ -34,6 +35,8 @@ VAPID_PUBLIC_KEY = None
 VAPID_CLAIMS = None
 ADMIN_PASSWORD = None
 GOOGLE_API_CALENDER_CREDS = None
+GMAIL_API_CREDS = None
+
 if len(sys.argv) > 1 and sys.argv[1] == '--local':
     import LocalHostConst
     push_service = FCMNotification(api_key=LocalHostConst.FCM_API_KEY)
@@ -51,9 +54,9 @@ else:
     VAPID_CLAIMS = loads(os.environ.get('VAPID_CLAIMS'))
     ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD')
     GOOGLE_API_CALENDER_CREDS = os.environ.get('GOOGLE_API_CALENDER_CREDS')
+    GMAIL_API_CREDS = os.environ.get('GMAIL_API_CREDS')
 
 app = Flask(__name__, static_url_path='/build')
-
 
 db = connection['flex-app']
 
@@ -61,6 +64,12 @@ CORS(app)
 
 db.Groups.create_index("name", unique=True)
 
+def is_admin(email):
+    group = get_group_by_email(email)
+    for admin in group['admin']:
+        if admin == email:
+            return True
+    return False
 
 def init_calendar_api():
     # Setup the Calendar API
@@ -80,6 +89,24 @@ def init_calendar_api():
         creds = tools.run_flow(flow, store, flags)
     global calendar_api_service
     calendar_api_service = build('calendar', 'v3', http=creds.authorize(Http()))
+
+    # Setup the Gmail API
+    try:
+        f = open("token.json", 'r')
+    except IOError:
+        f = open("token.json", 'w+')
+        f.write(str(GMAIL_API_CREDS))
+        f.close()
+    SCOPES = 'https://www.googleapis.com/auth/gmail.modify'
+    store = file.Storage('token.json')
+    creds = store.get()
+    if not creds or creds.invalid:
+        flow = client.flow_from_clientsecrets('gmail-creds.json', SCOPES)
+        flags = tools.argparser.parse_args(args=[])
+        creds = tools.run_flow(flow, store, flags)
+    global email_service
+    email_service = build('gmail', 'v1', http=creds.authorize(Http()))
+
 
 
 def id_generator(size=10, chars=string.ascii_uppercase + string.digits):
@@ -134,11 +161,6 @@ def catch_all(path):
         return send_from_directory('build', 'index.html')
 
 
-# @app.route('/')
-# @app.route('/where-is-everyone')
-# def root():
-#     return send_from_directory('build', 'index.html')
-
 @app.route('/send_email', methods=['GET'])
 def send_email(status, status_desc, name, email, start_date, end_date, note, repeat, timezone, all_day):
     event = {
@@ -153,6 +175,13 @@ def send_email(status, status_desc, name, email, start_date, end_date, note, rep
         },
         'displayName': name,
         'attendees': [
+            {
+                "email": "Where Are My Peers? <WheresMyPeers@gmail.com>",
+                "displayName": "Where Are My Peers?",
+                "organizer": True,
+                "self": True,
+                "responseStatus": "accepted"
+            },
             {
                 'email': email,
                 'responseStatus': 'needsAction',
@@ -211,9 +240,77 @@ def create_admin(email, group_id, group_name, subscription_info, password):
     return member
 
 
+def create_message(sender, to, subject, message_text):
+    """Create a message for an email.
+
+    Args:
+    sender: Email address of the sender.
+    to: Email address of the receiver.
+    subject: The subject of the email message.
+    message_text: The text of the email message.
+
+    Returns:
+    An object containing a base64url encoded email object.
+    """
+    message = MIMEText(message_text)
+    message['to'] = to
+    message['from'] = sender
+    message['subject'] = subject
+    return {'raw': base64.urlsafe_b64encode(message.as_string())}
+
+
+@app.route('/make_admin', methods=['POST'])
+@auth.login_required
+def make_admin():
+    body_json = request.get_json()
+    user_requesting = request.headers['user'][:request.headers['user'].find(":")]
+    if 'email' in body_json.keys() and is_admin(user_requesting):
+        group = get_group_by_email(user_requesting)
+        db.Groups.find_one_and_update({'name': group['name']},
+                                       {"$push": {"admin": body_json['email']}})
+        member = db.Members.find_one({'email': body_json['email']})
+        for sub in member["subscription"]:
+            data_message = {
+                "title": "Congratulations!",
+                "body": "You were appointed admin of " + group['name'],
+                "admin_message": True,
+                "subscription": sub,
+            }
+            try:
+                webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
+                        vapid_claims=VAPID_CLAIMS)
+            except WebPushException as ex:
+                print("Subscription is offline")
+        return dumps({'msg': "admin appointed", 'group': group['name'], 'email': body_json['email']}), 200
+    else:
+        return "Wrong Headers", 403
+
+
 @app.route('/forgot_password', methods=['POST'])
 def forgot_password():
-    return "sent", 200
+    body_json = request.get_json()
+    if 'email' in body_json.keys():
+
+        member = db.Members.find_one({'email': body_json['email']})
+        if member:
+            try:
+                new_pass = ''.join(random.choice(string.ascii_uppercase + string.digits + string.ascii_lowercase) for _ in range(8))
+                message = create_message('Where Are My Peers? <WheresMyPeers@gmail.com>',
+                               body_json['email'],
+                               "Reset Password",
+                               "You new password is " + new_pass)
+                message = (email_service.users().messages().send(userId="WheresMyPeers@gmail.com", body=message).execute())
+                print 'Message Id: %s' % message['id']
+                member['password'] = sha256_crypt.hash(new_pass)
+                db.Members.save(member)
+                print "Password Changed!"
+            except errors.HttpError, error:
+                print 'An error occurred: %s' % error
+
+        return "sent", 200
+    else:
+        return "Wrong Headers", 403
+
 
 
 @app.route('/send_push_testing', methods=['POST'])
@@ -256,29 +353,29 @@ def send_push_msg_to_admins(email, group_name, subscription_info, password):
             "name": group_name,
             "wf_options": [],
             "_id": group_id,
-            "admin": email
+            "admin": [email]
         }
         db.Groups.insert_one(group)
         return create_admin(email, group_id, group_name, subscription_info, password)
-    elif group['admin']:
-        print("ADMIN: " + str(group['admin']))
-
-        admin = db.Members.find_one({'email': re.compile(group['admin'], re.IGNORECASE)})
-        if admin:
-            for sub in admin["subscription"]:
-                try:
-                    data_message = {
-                        "title": "User approval",
-                        "body":  email + ", wants to register",
-                        "email": email,
-                        "admin": True,
-                        "name": email[:email.find("@")].replace(".", " ").title()
-                    }
-                    webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS)
-                except WebPushException as ex:
-                    print("Admin subscription is offline")
-        else:
-            print ("ERROR: Admin email does not exists")
+    elif group['admin'] and len(group['admin']) > 0:
+        for admin_email in group['admin']:
+            print("ADMIN: " + str(admin_email))
+            admin = db.Members.find_one({'email': re.compile(admin_email, re.IGNORECASE)})
+            if admin:
+                for sub in admin["subscription"]:
+                    try:
+                        data_message = {
+                            "title": "User approval",
+                            "body":  email + ", wants to register",
+                            "email": email,
+                            "admin": True,
+                            "name": email[:email.find("@")].replace(".", " ").title()
+                        }
+                        webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS)
+                    except WebPushException as ex:
+                        print("Admin subscription is offline")
+            else:
+                print ("ERROR: Admin email does not exists")
 
         db.awaitingMembers.insert_one({
             "email": email,
@@ -352,7 +449,7 @@ def get_admin_status():
     email = request.args.get('email')
     if email:
         group = get_group_by_email(email)
-        return dumps({'admin': group and group['admin'] == email}) , 200
+        return dumps({'admin': group and is_admin(email)}) , 200
     else:
         return "Wrong parameters", 403
 
@@ -386,7 +483,7 @@ def get_all_members():
     email = request.args.get('email')
     admin = db.Members.find_one({'email': re.compile(email, re.IGNORECASE)})
     group = get_group_by_email(email)
-    if admin and  group and group['admin'] == email:
+    if admin and  group and is_admin(email):
         members = db.Members.find({'group': group['_id']})
         members_to_return = []
         for member in members:
@@ -465,7 +562,7 @@ def check_subscription():
         if member:
             sub_from_client = loads(body_json['sub'])
             for sub in member["subscription"]:
-                if sub['endpoint'] == sub_from_client['endpoint']:
+                if sub and sub['endpoint'] == sub_from_client['endpoint']:
                     return "subscription exists", 200
             return "No subscription", 401
         else:
@@ -558,10 +655,9 @@ def get_user_reports():
 def logout():
     body_json = request.get_json()
     if 'email' in body_json.keys() and 'sub' in body_json.keys():
-        sub_from_client = loads(body_json['sub']) if body_json['sub'] else {}
-        if 'endpoint' in sub_from_client.keys():
+        if 'endpoint' in body_json['sub'].keys():
             member = db.Members.find_one_and_update({"email": re.compile(body_json['email'], re.IGNORECASE)},
-                                                    {"$pull": {"subscription": {"endpoint": sub_from_client['endpoint']}}},
+                                                    {"$pull": {"subscription": {"endpoint": body_json['sub']['endpoint']}}},
                                                     return_document=ReturnDocument.AFTER)
             if member:
                 return "Logout Successful", 200
@@ -671,7 +767,7 @@ def remove_member():
             return "Can't remove yourself", 400
         admin = db.Members.find_one({'email': re.compile(headers['adminemail'], re.IGNORECASE)})
         group = get_group_by_email(headers['adminemail'])
-        if admin and group and group['admin'] == headers['adminemail']:
+        if admin and group and is_admin(headers['adminemail']):
             member = db.Members.find_one_and_delete({'email': re.compile(headers['email'], re.IGNORECASE)})
             if member and member["subscription"]:
                 for sub in member["subscription"]:
@@ -741,18 +837,6 @@ def test_pass():
     return "success", 200
 
 
-@app.route('/verify_pass', methods=['POST'])
-def verify_pass():
-    body_json = request.get_json()
-    member = db.Members.find_one({"name": 'W'})
-    if member and member['password']:
-        member['pass'] = "2"
-        db.Members.save(member)
-        return str(sha256_crypt.verify(body_json['pass'], member['password'])), 200
-    else:
-        return "success", 500
-
-
 @auth.verify_password
 def verify_password(username, password):
     member = db.Members.find_one({"email": re.compile(username, re.IGNORECASE)})
@@ -760,6 +844,7 @@ def verify_password(username, password):
         return password == member['password'], 200
     else:
         return "success", 500
+
 if __name__ == "__main__":
     port = 3141
     if os.environ.get('PORT'):

@@ -1,7 +1,4 @@
-
-const SERVER_URL = "https://flex-server.herokuapp.com";
-// const SERVER_URL = "http://localhost:3141";
-const SITE_URL = "https://pwa-first-71a09.firebaseapp.com";
+const SITE_URL = "https://flex-server.herokuapp.com/";
 'use strict';
 const filesToCache = [
     "/images/admin-settings.png", "/images/dates.png", "/images/everyone.png", "/images/loc.png", "/images/next-button.png",
@@ -166,7 +163,7 @@ self.addEventListener('notificationclick', function(e) {
                     allDay: true,
                 })
             };
-            fetch(SERVER_URL +"/add_report", reqProps)
+            fetch("/add_report", reqProps)
                 .then(res => {
                     if (res.status !== 200) {
                         throw new Error("Error Connecting");
@@ -187,7 +184,7 @@ self.addEventListener('notificationclick', function(e) {
                 email: notification.data.email,
             })
         };
-        fetch(SERVER_URL + "/deny_user", reqProps)
+        fetch("/deny_user", reqProps)
             .then(res => {
                 console.log('res from deny user: ', res);
             });
@@ -200,7 +197,7 @@ self.addEventListener('notificationclick', function(e) {
                 email: notification.data.email,
             })
         };
-        fetch(SERVER_URL + "/add_user", reqProps)
+        fetch("/add_user", reqProps)
             .then(res => {
                 console.log('res from add user: ', res);
             });

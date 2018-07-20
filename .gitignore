@@ -10,3 +10,5 @@ del-heroku-apps.sh
 private_key.txt
 public_key.txt
 credentials.json
+gmail-creds.json
+token.json
