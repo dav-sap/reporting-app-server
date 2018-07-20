@@ -300,18 +300,14 @@ def forgot_password():
                                "Reset Password",
                                "You new password is " + new_pass)
                 message = (email_service.users().messages().send(userId="WheresMyPeers@gmail.com", body=message).execute())
-                print 'Message Id: %s' % message['id']
                 member['password'] = sha256_crypt.hash(new_pass)
                 db.Members.save(member)
-                print "Password Changed!"
-            except errors.HttpError, error:
-                print 'An error occurred: %s' % error
+            except Exception as e:
+                print ('An error occurred: %s' % e)
 
         return "sent", 200
     else:
         return "Wrong Headers", 403
-
-
 
 @app.route('/send_push_testing', methods=['POST'])
 def send_push_testing():
