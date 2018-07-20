@@ -26,7 +26,6 @@ pytz
 requests
 oauth2client
 google-api-python-client
-email
 base64
 requests-toolbelt
 six
