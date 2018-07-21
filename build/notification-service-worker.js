@@ -11,7 +11,7 @@ const staticCacheName = 'pages-cache-v1';
 function createAdminNoti(jsonData, e) {
     let options = {
         body: jsonData.body,
-        icon: 'mdpi.png',
+        icon: '/images/icon-networking-512.png',
         vibrate: [100, 50, 100],
         data: {
             dateOfArrival: Date.now(),
@@ -36,7 +36,7 @@ function createAdminNoti(jsonData, e) {
 function createAdminMessageNoti(jsonData, e) {
     let options = {
         body: jsonData.body,
-        icon: 'mdpi.png',
+        icon: '/images/icon-networking-512.png',
         vibrate: [100, 50, 100],
         data: {
             dateOfArrival: Date.now(),
@@ -64,7 +64,7 @@ function createReportNoti(jsonData, e) {
     });
     let options = {
         body: jsonData.body,
-        icon: 'mdpi.png',
+        icon: '/images/icon-networking-512.png',
         vibrate: [100, 50, 100],
         data: {
             dateOfArrival: Date.now(),
@@ -101,7 +101,7 @@ function createUser(jsonData, e) {
     });
     let options = {
         body: jsonData.body,
-        icon: 'mdpi.png',
+        icon: '/images/icon-networking-512.png',
         vibrate: [100, 50, 100],
         data: {
             dateOfArrival: Date.now(),
