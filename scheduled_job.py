@@ -36,7 +36,7 @@ else:
     if members and members.count() > 0:
         for doc in members:
             if len(doc["subscription"])> 0 and doc['email'].lower() == "david.saper@intel.com":
-                print doc["subscription"]
+                print (doc["subscription"])
                 data_message = {
                     "title": "Morning Report",
                     "body": "Morning, What are u up to today?",
