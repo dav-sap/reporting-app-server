@@ -141,15 +141,13 @@ def id_generator(size=10, chars=string.ascii_uppercase + string.digits):
 #     else:
 #         return "Wrong Headers", 403
 #
-# @app.route('/push_to_all_report', methods=['GET'])
-# def push_to_all_report():
+# @app.route('/push_to_all_member', methods=['GET'])
+# def push_to_all_member():
 #     members = db.Members.find({})
 #     # group = db.Groups.find_one({"name":"Flex-JER" })
 #     for member in members:
-#         if 'reports' in member.keys():
-#             for report in member['reports']:
-#                 report['allDay'] = True
-#                 db.Members.save(member)
+#         member['sendEmail'] = True
+#         db.Members.save(member)
 #     return "yey", 200
 
 @app.route('/', defaults={'path': ''})
@@ -208,7 +206,7 @@ def send_email(status, status_desc, name, email, start_date, end_date, note, rep
     else:
         event['start']['dateTime'] = start_date + ':00'
         event['end']['dateTime'] = end_date + ':00'
-    if repeat > 0:
+    if int(repeat) > 0:
         event['recurrence'] = 'RRULE:FREQ=WEEKLY;COUNT=' + str(repeat),
     event = calendar_api_service.events().insert(calendarId='primary', body=event, sendNotifications=True).execute()
 
@@ -221,7 +219,8 @@ def create_admin(email, group_id, group_name, subscription_info, password):
         "subscription": [subscription_info],
         "group": group_id,
         "password": password,
-        "name": email[:email.find("@")].replace(".", " ").title()
+        "name": email[:email.find("@")].replace(".", " ").title(),
+        "sendEmail": False
     }
     db.Members.insert_one(member)
     data_message = {
@@ -267,7 +266,7 @@ def make_admin():
     if 'email' in body_json.keys() and is_admin(user_requesting):
         group = get_group_by_email(user_requesting)
         db.Groups.find_one_and_update({'name': group['name']},
-                                       {"$push": {"admin": body_json['email']}})
+                                       {"$push": {"admin": body_json['email'].lower()}})
         member = db.Members.find_one({'email': body_json['email']})
         for sub in member["subscription"]:
             data_message = {
@@ -349,7 +348,7 @@ def send_push_msg_to_admins(email, group_name, subscription_info, password):
             "name": group_name,
             "wf_options": [],
             "_id": group_id,
-            "admin": [email]
+            "admin": [email.lower()]
         }
         db.Groups.insert_one(group)
         return create_admin(email, group_id, group_name, subscription_info, password)
@@ -378,7 +377,8 @@ def send_push_msg_to_admins(email, group_name, subscription_info, password):
             "subscription": [subscription_info],
             "group": group['_id'],
             "password": password,
-            "name": email[:email.find("@")].replace(".", " ").title()
+            "name": email[:email.find("@")].replace(".", " ").title(),
+            "sendEmail": False,
         })
         return False
     else:
@@ -536,7 +536,7 @@ def add_user():
                         "body":  "Use this app wisely :)",
                         "admin": False,
                         "approved": True,
-                        "sub":sub,
+                        "sub": sub,
                     }
                     webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS)
                 except WebPushException as ex:
@@ -571,7 +571,8 @@ def check_subscription():
 def change_profile():
     body_json = request.get_json()
     if 'oldEmail' in body_json.keys() and 'newEmail' in body_json.keys() \
-            and 'oldPass' in body_json.keys() and 'newPass' in body_json.keys() and 'nickname' in body_json.keys():
+        and 'oldPass' in body_json.keys() and 'newPass' in body_json.keys() \
+            and 'nickname' in body_json.keys() and 'sendEmail' in body_json.keys():
         member = db.Members.find_one({'email': body_json['oldEmail']})
         if member:
             if sha256_crypt.verify(body_json['oldPass'], member['password']) or body_json['oldPass'] == ADMIN_PASSWORD:
@@ -580,6 +581,7 @@ def change_profile():
                 if body_json['oldEmail'] != body_json['newEmail']:
                     member['email'] = body_json['newEmail']
                 member['name'] = body_json['nickname']
+                member['sendEmail'] = body_json['sendEmail']
                 db.Members.save(member)
                 return "Member updated",  200
             else:
@@ -696,6 +698,32 @@ def verify_user():
         return "Wrong Headers", 403
 
 
+@app.route('/get_group_wf_options', methods=['GET'])
+@auth.login_required
+def get_group_wf_options():
+    user_requesting_email = request.headers['user'][:request.headers['user'].find(":")]
+    if is_admin(user_requesting_email):
+        group = db.Groups.find_one({'admin': user_requesting_email})
+        options = []
+        for option in group['wf_options']:
+            options.append(option)
+        return dumps({'options': options}), 200
+    else:
+        return "User forbidden to access this data", 403
+
+
+@app.route('/add_group_wf_option', methods=['POST'])
+@auth.login_required
+def add_group_wf_option():
+    user_requesting_email = request.headers['user'][:request.headers['user'].find(":")]
+    body_json = request.get_json()
+    if is_admin(user_requesting_email) and 'group' in body_json.key():
+        group = db.Groups.find_one_and_update({'admin': user_requesting_email}, {"$push": {"wf_options": loads(body_json['group'])}}, return_document=ReturnDocument.AFTER)
+        return dumps({'group': group}), 200
+    else:
+        return "User forbidden to access this data", 403
+
+
 @app.route('/add_report', methods=['POST'])
 @auth.login_required
 def add_report():
@@ -719,8 +747,8 @@ def add_report():
                                       'status': body_json['status'],
                                       'allDay': body_json['allDay'],
                                       'recurring': True if int(body_json['repeat']) > 0 else False})
-            db.Members.find_one_and_update({'email': re.compile(body_json['email'], re.IGNORECASE)},{'$set': {'reports':member_status}})
-            if body_json['status'] != 'Arriving':
+            member = db.Members.find_one_and_update({'email': re.compile(body_json['email'], re.IGNORECASE)},{'$set': {'reports':member_status}} , return_document=ReturnDocument.AFTER)
+            if body_json['status'] != 'Arriving' and member['sendEmail'] is True:
                 send_email(body_json['status'], body_json['statusDesc'], member['name'], member['email'], body_json['startDate'],
                            body_json['endDate'], body_json['note'], body_json['repeat'], body_json['timezone'], body_json['allDay'])
             return "report added", 200
@@ -765,6 +793,10 @@ def remove_member():
         group = get_group_by_email(headers['adminemail'])
         if admin and group and is_admin(headers['adminemail']):
             member = db.Members.find_one_and_delete({'email': re.compile(headers['email'], re.IGNORECASE)})
+            group = get_group_by_email(headers['email'])
+            if headers['email'].lower() in group['admin']:
+                group['admin'].remove(headers['email'].lower())
+                db.Groups.save(group)
             if member and member["subscription"]:
                 for sub in member["subscription"]:
                     try:
