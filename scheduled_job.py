@@ -43,7 +43,11 @@ else:
                 }
                 for sub in doc["subscription"]:
                     try:
-                        webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,vapid_claims=VAPID_CLAIMS, timeout=10)
+                        # start_search_index = sub['endpoint'].find("//") + 2
+                        # end_of_url_index = sub['endpoint'][start_search_index:].find("/")
+                        # VAPID_CLAIMS['aud'] = sub['endpoint'][:(end_of_url_index + start_search_index)]
+                        webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
+                                vapid_claims=VAPID_CLAIMS, timeout=10)
                     except WebPushException as ex:
                         print("subscription is offline")
                         db.Members.find_one_and_update({'name': doc['name'], 'email': doc['email']},
