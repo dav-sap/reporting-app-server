@@ -65,12 +65,14 @@ CORS(app)
 
 db.Groups.create_index("name", unique=True)
 
+
 def is_admin(email):
     group = get_group_by_email(email)
     for admin in group['admin']:
-        if admin == email:
+        if admin.lower() == email.lower():
             return True
     return False
+
 
 def init_calendar_api():
     # Setup the Calendar API
