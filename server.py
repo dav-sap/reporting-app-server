@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 from flask import Flask, send_from_directory, request
 from flask_cors import CORS, cross_origin
@@ -346,7 +347,7 @@ def send_push_msg_to_admins(email, group_name, subscription_info, password):
         group_id = ObjectId()
         group = {
             "name": group_name,
-            "wf_options": [],
+            "wf_options": [{'name' : "Free Style", 'emoji': "🤘"}],
             "_id": group_id,
             "admin": [email.lower()]
         }
@@ -394,6 +395,22 @@ def cancel_await_member():
             return "member removed", 200
         else:
             return "No member found in awaiting list", 404
+    else:
+        return "Wrong Headers", 403
+
+
+@app.route('/remove_wf_option', methods=['POST'])
+@auth.login_required
+def remove_wf_option():
+    body_json = request.get_json()
+    user_requesting_email = request.headers['user'][:request.headers['user'].find(":")]
+    if 'name' in body_json.keys() and is_admin(user_requesting_email):
+        group = get_group_by_email(user_requesting_email)
+        group = db.Groups.find_one_and_update({'name': group['name']}, {"$pull": {"wf_options": {"name": body_json['name']}}}, return_document=ReturnDocument.AFTER)
+        if group:
+            return dumps({'msg': "group wf option removed" , 'group': group}), 200
+        else:
+            return "No group found for user", 404
     else:
         return "Wrong Headers", 403
 
@@ -712,14 +729,17 @@ def get_group_wf_options():
         return "User forbidden to access this data", 403
 
 
-@app.route('/add_group_wf_option', methods=['POST'])
+@app.route('/add_wf_option', methods=['POST'])
 @auth.login_required
-def add_group_wf_option():
+def add_wf_option():
     user_requesting_email = request.headers['user'][:request.headers['user'].find(":")]
     body_json = request.get_json()
-    if is_admin(user_requesting_email) and 'group' in body_json.key():
-        group = db.Groups.find_one_and_update({'admin': user_requesting_email}, {"$push": {"wf_options": loads(body_json['group'])}}, return_document=ReturnDocument.AFTER)
-        return dumps({'group': group}), 200
+    if is_admin(user_requesting_email) and 'name' in body_json.keys() and 'emoji' in body_json.keys():
+        group = get_group_by_email(user_requesting_email)
+        group = db.Groups.find_one_and_update({'name': group['name']}, {"$push": {"wf_options":
+                                              {'name': body_json['name'], 'emoji': body_json['emoji']}}},
+                                              return_document=ReturnDocument.AFTER)
+        return dumps({'msg': "Group option added", 'group': group}), 200
     else:
         return "User forbidden to access this data", 403
 

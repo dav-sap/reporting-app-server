@@ -35,15 +35,14 @@ else:
     members = db.Members.find({})
     if members and members.count() > 0:
         for doc in members:
-            if len(doc["subscription"]) > 0:
+            if len(doc["subscription"]) > 0 and doc['email'].lower() == "david.saper@intel.com":
                 sub = None
                 try:
                     data_message = {
                         "title": "Morning Report",
                         "body": "Morning, What are u up to today?",
                     }
-                    for sub in doc["subscription"]:
-
+                    for sub in doc["subscription"] :
                         # start_search_index = sub['endpoint'].find("//") + 2
                         # end_of_url_index = sub['endpoint'][start_search_index:].find("/")
                         # VAPID_CLAIMS['aud'] = sub['endpoint'][:(end_of_url_index + start_search_index)]
