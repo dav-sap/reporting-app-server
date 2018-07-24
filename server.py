@@ -558,8 +558,6 @@ def add_user():
                     webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS)
                 except WebPushException as ex:
                     print("user subscription is offline")
-                    if 'endpoint' in sub.keys():
-                        db.Members.find_one_and_update({'email': headers['email']}, {"$pull": {"subscription": {"endpoint": sub['endpoint']}}})
             return "User added"
         else:
             return "No member found in awaiting list", 404

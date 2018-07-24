@@ -3,6 +3,7 @@ from pymongo import MongoClient
 from pywebpush import webpush, WebPushException
 from pyfcm import FCMNotification
 import json
+import re
 import datetime
 import sys
 from bson.json_util import loads
@@ -36,26 +37,25 @@ else:
     if members and members.count() > 0:
         for doc in members:
             if len(doc["subscription"]) > 0 and doc['email'].lower() == "david.saper@intel.com":
-                sub = None
-                try:
-                    data_message = {
-                        "title": "Morning Report",
-                        "body": "Morning, What are u up to today?",
-                    }
-                    for sub in doc["subscription"] :
+                data_message = {
+                    "title": "Morning Report",
+                    "body": "Morning, What are u up to today?",
+                }
+                for sub in doc["subscription"]:
+                    if not sub:
+                        db.Members.find_one_and_update({'email': re.compile(doc['email'], re.IGNORECASE)},
+                                                                                       {"$pull": {"subscription": sub}})
+                        continue
+                    try:
                         # start_search_index = sub['endpoint'].find("//") + 2
                         # end_of_url_index = sub['endpoint'][start_search_index:].find("/")
                         # VAPID_CLAIMS['aud'] = sub['endpoint'][:(end_of_url_index + start_search_index)]
                         webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
                                 vapid_claims=VAPID_CLAIMS, timeout=10)
-                except WebPushException as ex:
-                    print("subscription is offline")
-                    db.Members.find_one_and_update({'name': doc['name'], 'email': doc['email']},
-                                                    {"$pull": {"subscription": sub}})
-                except Exception as ex:
-                    print ("unknown exception")
-                    print (ex)
-                    print (doc['name'])
-                    if sub:
-                        db.Members.find_one_and_update({'name': doc['name'], 'email': doc['email']},
-                                                       {"$pull": {"subscription": sub}})
+                    except WebPushException as ex:
+                        print("subscription is offline")
+
+                    except Exception as ex:
+                        print ("unknown exception")
+                        print (ex)
+                        print (doc['name'])
