@@ -13,11 +13,10 @@
       "type": "image/png"
     }
   ],
-  "Scope": "/",
   "start_url": "./index.html",
   "display": "standalone",
   "theme_color": "#000000",
-  "background_color": "#d83a79",
+  "background_color": "#000000",
   "gcm_sender_id": "332446971218"
 
 }
