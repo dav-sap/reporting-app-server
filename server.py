@@ -719,14 +719,14 @@ def verify_user():
 @auth.login_required
 def get_group_wf_options():
     user_requesting_email = request.headers['user'][:request.headers['user'].find(":")]
-    if is_admin(user_requesting_email):
-        group = db.Groups.find_one({'admin': user_requesting_email})
-        options = []
+    group = get_group_by_email(user_requesting_email)
+    options = []
+    if group:
         for option in group['wf_options']:
             options.append(option)
         return dumps({'options': options}), 200
-    else:
-        return "User forbidden to access this data", 403
+    return dumps({'msg': "no group found"}), 404
+
 
 
 @app.route('/add_wf_option', methods=['POST'])
