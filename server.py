@@ -845,7 +845,7 @@ def register():
     body_json = request.get_json()
     if 'email' in body_json.keys() and 'group' in body_json.keys() and 'sub' in body_json.keys() and 'password' in body_json.keys():
         if db.Members.find({"email": re.compile(body_json['email'], re.IGNORECASE)}).count() > 0:
-            return "User already taken", 403
+            return "User already taken", 409
 
         member = send_push_msg_to_admins(body_json['email'], body_json['group'],loads(body_json['sub'] if body_json['sub'] else {}), sha256_crypt.hash(body_json['password']))
         if not member:
