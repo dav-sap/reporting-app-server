@@ -1,12 +1,6 @@
 const SITE_URL = "https://flex-server.herokuapp.com/";
 'use strict';
-const filesToCache = [
-    "/images/admin-settings.png", "/images/dates.png", "/images/everyone.png", "/images/loc.png", "/images/next-button.png",
-    "/images/noti-off.png", "/images/noti-on.png", "/images/user-home.png", "/images/v.png", "/images/x.png","/images/waitAuth.png"
 
-];
-
-const staticCacheName = 'pages-cache-v1';
 
 function createAdminNoti(jsonData, e) {
     let options = {
