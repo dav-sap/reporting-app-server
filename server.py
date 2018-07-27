@@ -159,7 +159,7 @@ def catch_all(path):
     if path != "" and os.path.exists("build/" + path):
         return send_from_directory('build', path)
     else:
-        return send_from_directory('build', 'index.html')
+        return path, 404
 
 
 @app.route('/send_email', methods=['GET'])
