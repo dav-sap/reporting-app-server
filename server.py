@@ -57,7 +57,7 @@ else:
     GOOGLE_API_CALENDER_CREDS = os.environ.get('GOOGLE_API_CALENDER_CREDS')
     GMAIL_API_CREDS = os.environ.get('GMAIL_API_CREDS')
 
-app = Flask(__name__, static_url_path='/build')
+app = Flask(__name__, static_url_path='/build', static_folder="build")
 
 db = connection['flex-app']
 
@@ -158,6 +158,15 @@ def id_generator(size=10, chars=string.ascii_uppercase + string.digits):
 def catch_all(path):
     if path != "" and os.path.exists("build/" + path):
         return send_from_directory('build', path)
+    elif path != "" and path.startswith("static"):
+        if path.startswith("static/js"):
+            for f in os.listdir(os.path.join(app.static_folder, "static/js")):
+                if f.endswith(".js"):
+                    return send_from_directory('build', "static/js/" + f)
+        elif path.startswith("static/css"):
+            for f in os.listdir(os.path.join(app.static_folder, "static/css")):
+                if f.endswith(".css"):
+                    return send_from_directory('build', "static/css/" + f)
     else:
         return send_from_directory('build', 'index.html')
 
