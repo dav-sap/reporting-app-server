@@ -814,22 +814,23 @@ def remove_member():
         if admin and group and is_admin(headers['adminemail']):
             member = db.Members.find_one_and_delete({'email': re.compile(headers['email'], re.IGNORECASE)})
             group = get_group_by_email(headers['email'])
-            if headers['email'].lower() in group['admin']:
+            if group and headers['email'].lower() in group['admin']:
                 group['admin'].remove(headers['email'].lower())
                 db.Groups.save(group)
-            if member and member["subscription"]:
-                for sub in member["subscription"]:
-                    try:
-                        data_message = {
-                            "title": "Remove Member",
-                            "body":  member["email"] + ", your membership has been removed, please sign up",
-                            "email": member["email"],
-                            "approved": False,
-                        }
-                        webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
-                                vapid_claims=VAPID_CLAIMS)
-                    except WebPushException as ex:
-                        print("user subscription is offline")
+            if member:
+                if member["subscription"]:
+                    for sub in member["subscription"]:
+                        try:
+                            data_message = {
+                                "title": "Remove Member",
+                                "body":  member["email"] + ", your membership has been removed, please sign up",
+                                "email": member["email"],
+                                "approved": False,
+                            }
+                            webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
+                                    vapid_claims=VAPID_CLAIMS)
+                        except WebPushException as ex:
+                            print("user subscription is offline")
                 return "member removed", 200
             else:
                 return "No member found in member list", 404
