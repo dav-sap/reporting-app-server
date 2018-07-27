@@ -230,4 +230,4 @@ self.addEventListener('push', function(e) {
         console.log(JSON.stringify(e));
     }
 
-})
+});
