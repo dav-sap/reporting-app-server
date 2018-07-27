@@ -720,7 +720,6 @@ def verify_user():
 @app.route('/get_group_wf_options', methods=['GET'])
 @auth.login_required
 def get_group_wf_options():
-    print ("test")
     user_requesting_email = request.headers['user'][:request.headers['user'].find(":")]
     group = get_group_by_email(user_requesting_email)
     options = []
