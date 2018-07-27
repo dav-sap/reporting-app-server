@@ -156,6 +156,8 @@ def id_generator(size=10, chars=string.ascii_uppercase + string.digits):
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def catch_all(path):
+    print ("build/" + path)
+    print (os.path.exists("build/" + path))
     if path != "" and os.path.exists("build/" + path):
         return send_from_directory('build', path)
     else:
