@@ -434,11 +434,12 @@ def remove_time_zone(date):
 
 
 @app.route('/get_members_status_by_date', methods=['GET'])
+@auth.login_required
 def get_members_status_by_date():
     date = str(request.args.get('date'))
-    user = str(request.args.get('user'))
-    if date and user:
-        group = get_group_by_email(user)
+    user_requesting_email = request.headers['user'][:request.headers['user'].find(":")]
+    if date and user_requesting_email:
+        group = get_group_by_email(user_requesting_email)
         if group and '_id' in group.keys():
             members = db.Members.find({'group': group['_id']})
             reports = []
@@ -901,7 +902,7 @@ def verify_password(username, password):
     if member and member['password']:
         return password == member['password'], 200
     else:
-        return "success", 500
+        return "No member", 401
 
 if __name__ == "__main__":
     port = 3141
