@@ -688,17 +688,20 @@ def remove_report():
 
 
 @app.route('/get_user_reports', methods=['GET'])
+@auth.login_required
 def get_user_reports():
-    headers = request.headers
-    if 'Email' in headers.keys():
-        member = db.Members.find_one({"email": re.compile(headers['email'], re.IGNORECASE)})
-        if member:
-            list_to_ret = member['reports'] if 'reports' in member.keys() else []
-            return dumps(list_to_ret), 200
-        else:
-            return "No such member", 401
+    user_requesting_email = request.headers['user'][:request.headers['user'].find(":")]
+
+    # TODO:: remove in a week, old version
+    if 'Email' in request.headers.keys():
+        user_requesting_email = request.headers['email']
+
+    member = db.Members.find_one({"email": re.compile(user_requesting_email, re.IGNORECASE)})
+    if member:
+        member['reports'].sort(key=lambda x: datetime.strptime(x['endDate'][:x['endDate'].rfind(".")], '%Y-%m-%dT%H:%M:%S'), reverse=True) if 'reports' in member.keys() else []
+        return dumps(member['reports']), 200
     else:
-        return "Wrong Headers", 403
+        return "No such member", 401
 
 
 @app.route('/logout', methods=['POST'])
@@ -728,6 +731,7 @@ def verify_await_user():
     if 'email' in body_json.keys():
         member = db.awaitingMembers.find_one({"email": body_json['email']})
         if member:
+            del member['reports']
             return dumps({'info': "user verified", 'member': dumps(member)}), 200
 
         else:
@@ -742,6 +746,7 @@ def verify_user():
     if 'email' in body_json.keys():
         member = db.Members.find_one({"email": body_json['email']})
         if member:
+            del member['reports']
             return dumps({'info': "user verified", 'member': dumps(member)}), 200
 
         else:
@@ -761,7 +766,6 @@ def get_group_wf_options():
             options.append(option)
         return dumps({'options': options}), 200
     return dumps({'msg': "no group found"}), 404
-
 
 
 @app.route('/add_wf_option', methods=['POST'])
