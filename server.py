@@ -687,15 +687,15 @@ def remove_report():
         return "Wrong Headers", 403
 
 
+# TODO:: update auto login a a few days
 @app.route('/get_user_reports', methods=['GET'])
-@auth.login_required
+# @auth.login_required
 def get_user_reports():
-    user_requesting_email = request.headers['user'][:request.headers['user'].find(":")]
-
     # TODO:: remove in a week, old version
     if 'Email' in request.headers.keys():
         user_requesting_email = request.headers['email']
-
+    else:
+        user_requesting_email = request.headers['user'][:request.headers['user'].find(":")]
     member = db.Members.find_one({"email": re.compile(user_requesting_email, re.IGNORECASE)})
     if member:
         member['reports'].sort(key=lambda x: datetime.strptime(x['endDate'][:x['endDate'].rfind(".")], '%Y-%m-%dT%H:%M:%S'), reverse=True) if 'reports' in member.keys() else []
