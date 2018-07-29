@@ -352,6 +352,33 @@ def get_groups():
     return dumps({'groups': group_titles}), 200
 
 
+@app.route('/remove_group', methods=['POST'])
+@auth.login_required
+def remove_group():
+    user_requesting_email = request.headers['user'][:request.headers['user'].find(":")]
+    if is_admin(user_requesting_email):
+
+        group = get_group_by_email(user_requesting_email)
+        group_name = group['name']
+
+        members = db.Members.find({'group': group['_id']})
+
+        for member in members:
+            db.Members.delete_one({'email': member['email']})
+
+        awaiting_members = db.awaitingMembers.find({'group': group['_id']})
+        for member in awaiting_members:
+            db.awaitingMembers.delete_one({'email': member['email']})
+
+        group = db.Groups.delete_one({'name': group['name']})
+        if group:
+            return dumps({'msg': "group removed", 'group': group_name}), 200
+        else:
+            return "No group found for user", 404
+    else:
+        return "You don't have the correct privileges", 403
+
+
 def send_push_msg_to_admins(email, group_name, subscription_info, password):
     group = db.Groups.find_one({"name": group_name})
     if not group:
@@ -504,27 +531,25 @@ def get_members_status_between_dates():
 
 
 @app.route('/get_all_members', methods=['GET'])
+@auth.login_required
 def get_all_members():
-    email = request.args.get('email')
-    admin = db.Members.find_one({'email': re.compile(email, re.IGNORECASE)})
-    group = get_group_by_email(email)
-    if admin and  group and is_admin(email):
+    user_requesting = request.headers['user'][:request.headers['user'].find(":")]
+    group = get_group_by_email(user_requesting)
+    if group and is_admin(user_requesting):
         members = db.Members.find({'group': group['_id']})
-        members_to_return = []
-        for member in members:
-            members_to_return.append(member)
-        return dumps({'members': members_to_return}), 200
+        return dumps({'members': members}), 200
     else:
         return "No group found", 400
 
 
 @app.route('/get_awaiting_members', methods=['GET'])
+@auth.login_required
 def get_awaiting_members():
-    members = db.awaitingMembers.find({})
-    members_to_return = []
-    for member in members:
-        members_to_return.append(member)
-    return dumps({'members': members_to_return}), 200
+    user_requesting = request.headers['user'][:request.headers['user'].find(":")]
+    group = get_group_by_email(user_requesting)
+    if group and is_admin(user_requesting):
+        members = db.awaitingMembers.find({'group': group['_id']})
+        return dumps({'members': members}), 200
 
 
 def get_group_by_email(email):
