@@ -66,6 +66,14 @@ CORS(app)
 db.Groups.create_index("name", unique=True)
 
 
+def get_vapid_claims_for_endpoint(endpoint):
+    new_vapid_claims = VAPID_CLAIMS
+    start_search_index = endpoint.find("//") + 2
+    end_of_url_index = endpoint[start_search_index:].find("/")
+    new_vapid_claims['aud'] = endpoint[:(end_of_url_index + start_search_index)]
+    return new_vapid_claims
+
+
 def is_admin(email):
     group = get_group_by_email(email)
     for admin in group['admin']:
@@ -115,35 +123,6 @@ def init_calendar_api():
 def id_generator(size=10, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
 
-
-# @app.route('/push_to_all', methods=['POST'])
-# def push_to_all():
-#     headers = request.headers
-#     if 'Msg-Title' in headers.keys() and 'Msg-Body' in headers.keys():
-#         members = db.Members.find({})
-#         if members and members.count() > 0:
-#             for doc in members:
-#
-#                     if len(doc["subscription"]) > 0:
-#                         data_message = {
-#                             "title": headers['Msg-Body'],
-#                             "body": headers['Msg-Body'],
-#                             "admin_message": True
-#                         }
-#                         for sub in doc["subscription"]:
-#                             try:
-#                                 webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
-#                                         vapid_claims=VAPID_CLAIMS)
-#                             except WebPushException as ex:
-#                                 print("subscription is offline")
-#                                 db.Members.find_one_and_update({'email': re.compile(doc['email'], re.IGNORECASE)},
-#                                                                {"$pull": {"subscription": sub}})
-#             return "sending push", 200
-#         else:
-#             return "No Members", 400
-#     else:
-#         return "Wrong Headers", 403
-#
 # @app.route('/push_to_all_member', methods=['GET'])
 # def push_to_all_member():
 #     members = db.Members.find({})
@@ -244,7 +223,8 @@ def create_admin(email, group_id, group_name, subscription_info, password):
     }
     if subscription_info:
         try:
-            webpush(subscription_info, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,vapid_claims=VAPID_CLAIMS)
+            webpush(subscription_info, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
+                    vapid_claims=get_vapid_claims_for_endpoint(subscription_info['endpoint']))
         except WebPushException as ex:
             print("Admin subscription is offline")
     print("No Admins. Making " + email + " an Admin!")
@@ -289,7 +269,7 @@ def make_admin():
             }
             try:
                 webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
-                        vapid_claims=VAPID_CLAIMS)
+                        vapid_claims=get_vapid_claims_for_endpoint(sub['endpoint']))
             except WebPushException as ex:
                 print("Subscription is offline")
         return dumps({'msg': "admin appointed", 'group': group['name'], 'email': body_json['email']}), 200
@@ -319,28 +299,6 @@ def forgot_password():
         return "sent", 200
     else:
         return "Wrong Headers", 403
-
-@app.route('/send_push_testing', methods=['POST'])
-def send_push_testing():
-
-    admins = db.Members.find({"admin": True})
-    if admins and admins.count() > 0:
-        for doc in admins:
-            print("ADMIN: " + str(doc))
-            try:
-                if doc["subscription"]:
-                    for sub in doc["subscription"]:
-                        data_message = {
-                            "title": "Morning Report",
-                            "body": "testing"
-                        }
-                        webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS, timeout=10)
-            except WebPushException as ex:
-                print (ex)
-                print("Admin subscription is offline")
-        return "success", 200
-    else:
-        return "no admins", 400
 
 
 @app.route('/get_groups', methods=['GET'])
@@ -405,7 +363,8 @@ def send_push_msg_to_admins(email, group_name, subscription_info, password):
                             "admin": True,
                             "name": email[:email.find("@")].replace(".", " ").title()
                         }
-                        webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS)
+                        webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
+                                vapid_claims=get_vapid_claims_for_endpoint(sub['endpoint']))
                     except WebPushException as ex:
                         print("Admin subscription is offline")
             else:
@@ -592,7 +551,8 @@ def add_user():
                         "approved": True,
                         "sub": sub,
                     }
-                    webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims=VAPID_CLAIMS)
+                    webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
+                            vapid_claims=get_vapid_claims_for_endpoint(sub['endpoint']))
                 except WebPushException as ex:
                     print("user subscription is offline")
             return "User added"
@@ -832,7 +792,7 @@ def deny_user():
                         "approved": False,
                     }
                     webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
-                            vapid_claims=VAPID_CLAIMS)
+                            vapid_claims=get_vapid_claims_for_endpoint(sub['endpoint']))
                 except WebPushException as ex:
                     print("user subscription is offline")
             return "user removed from waiting list", 200
@@ -867,7 +827,7 @@ def remove_member():
                                 "approved": False,
                             }
                             webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
-                                    vapid_claims=VAPID_CLAIMS)
+                                    vapid_claims=get_vapid_claims_for_endpoint(sub['endpoint']))
                         except WebPushException as ex:
                             print("user subscription is offline")
                 return "member removed", 200

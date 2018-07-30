@@ -41,21 +41,26 @@ else:
                     "title": "Morning Report",
                     "body": "Morning, What are u up to today?",
                 }
+                subs_to_keep = []
                 for sub in doc["subscription"]:
                     if not sub:
-                        db.Members.find_one_and_update({'email': re.compile(doc['email'], re.IGNORECASE)},
-                                                                                       {"$pull": {"subscription": sub}})
                         continue
                     try:
-                        # start_search_index = sub['endpoint'].find("//") + 2
-                        # end_of_url_index = sub['endpoint'][start_search_index:].find("/")
-                        # VAPID_CLAIMS['aud'] = sub['endpoint'][:(end_of_url_index + start_search_index)]
+                        start_search_index = sub['endpoint'].find("//") + 2
+                        end_of_url_index = sub['endpoint'][start_search_index:].find("/")
+                        VAPID_CLAIMS['aud'] = sub['endpoint'][:(end_of_url_index + start_search_index)]
                         webpush(sub, json.dumps(data_message), vapid_private_key=VAPID_PRIVATE_KEY,
                                 vapid_claims=VAPID_CLAIMS, timeout=10)
+                        subs_to_keep.append(sub)
                     except WebPushException as ex:
-                        print("subscription is offline")
+                        print(ex)
+                        if ex.response.status_code != 410:
+                            subs_to_keep.append(sub)
 
                     except Exception as ex:
                         print ("unknown exception")
                         print (ex)
                         print (doc['name'])
+                doc["subscription"] = subs_to_keep
+                db.Members.save(doc)
+                subs_to_keep = []
