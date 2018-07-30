@@ -419,11 +419,14 @@ def remove_time_zone(date):
         return date
 
 
+#TODO old v update
 @app.route('/get_members_status_by_date', methods=['GET'])
-@auth.login_required
+#auth.login_required
 def get_members_status_by_date():
     date = str(request.args.get('date'))
-    user_requesting_email = request.headers['user'][:request.headers['user'].find(":")]
+    user_requesting_email = str(request.args.get('user'))
+    if not user_requesting_email:
+        user_requesting_email = request.headers['user'][:request.headers['user'].find(":")]
     if date and user_requesting_email:
         group = get_group_by_email(user_requesting_email)
         if group and '_id' in group.keys():
