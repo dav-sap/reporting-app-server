@@ -211,7 +211,8 @@ def create_admin(email, group_id, group_name, subscription_info, password):
         "group": group_id,
         "password": password,
         "name": email[:email.find("@")].replace(".", " ").title(),
-        "sendEmail": False
+        "sendEmail": False,
+        "reports": []
     }
     db.Members.insert_one(member)
     data_message = {
@@ -377,6 +378,7 @@ def send_push_msg_to_admins(email, group_name, subscription_info, password):
             "password": password,
             "name": email[:email.find("@")].replace(".", " ").title(),
             "sendEmail": False,
+            "reports": []
         })
         return False
     else:
