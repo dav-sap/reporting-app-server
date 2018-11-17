@@ -29,13 +29,15 @@ else:
     VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
     VAPID_CLAIMS = loads(os.environ.get('VAPID_CLAIMS'))
 
-if datetime.datetime.today().weekday() == 5 or datetime.datetime.today().weekday() == 4:
+if datetime.datetime.today().weekday() == 6 or datetime.datetime.today().weekday() == 4:
     print("Wrong weekday: " + str(datetime.datetime.today().weekday()))
 else:
     db = connection['flex-app']
     members = db.Members.find({})
     if members and members.count() > 0:
         for doc in members:
+            if doc["email"].lower() != "david.saper@intel.com".lower():
+                continue
             if len(doc["subscription"]) > 0:
                 data_message = {
                     "title": "Morning Report",

@@ -3,6 +3,7 @@
 
 # IDE
 /.idea
+/venv
 
 *.pyc
 LocalHostConst.py
