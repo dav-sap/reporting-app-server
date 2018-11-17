@@ -36,8 +36,6 @@ else:
     members = db.Members.find({})
     if members and members.count() > 0:
         for doc in members:
-            if doc["email"].lower() != "david.saper@intel.com".lower():
-                continue
             if len(doc["subscription"]) > 0:
                 data_message = {
                     "title": "Morning Report",
