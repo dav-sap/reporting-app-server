@@ -356,6 +356,8 @@ def send_push_msg_to_admins(email, group_name, subscription_info, password):
             admin = db.Members.find_one({'email': re.compile(admin_email, re.IGNORECASE)})
             if admin:
                 for sub in admin["subscription"]:
+                    if 'endpoint' not in sub:
+                        continue
                     try:
                         data_message = {
                             "title": "User approval",

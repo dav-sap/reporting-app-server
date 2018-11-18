@@ -29,7 +29,7 @@ else:
     VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
     VAPID_CLAIMS = loads(os.environ.get('VAPID_CLAIMS'))
 
-if datetime.datetime.today().weekday() == 6 or datetime.datetime.today().weekday() == 4:
+if datetime.datetime.today().weekday() == 5 or datetime.datetime.today().weekday() == 4:
     print("Wrong weekday: " + str(datetime.datetime.today().weekday()))
 else:
     db = connection['flex-app']
